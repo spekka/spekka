@@ -1,4 +1,4 @@
-# Spekka - Simple Productivity Enhancements for Akka
+# Spekka
 
 This library provides a series of enhancements for Akka with the goal of maximizing developer productivity.
 
@@ -7,4 +7,4 @@ This library provides a series of enhancements for Akka with the goal of maximiz
 
 Development of this project is sponsored by Thinkinside (www.thinkin.io)
 
-![ThinkIN logo](spekka-docs/src/main/paradox/images/thinkin.png)
+![ThinkIN logo](images/thinkin.png)
