@@ -23,7 +23,6 @@ import akka.stream.scaladsl.Merge
 import akka.stream.scaladsl.Partition
 import spekka.stream.ExtendedContext
 import spekka.stream.StackableContext
-import spekka.stream.scaladsl.internal.Multiplexed
 
 import scala.collection.immutable
 

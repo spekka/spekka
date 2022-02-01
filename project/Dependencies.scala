@@ -1,7 +1,7 @@
 import sbt._
 
 object Dependencies {
-  lazy val AkkaVersion = "2.6.17"
+  lazy val AkkaVersion = "2.6.16"
 
   lazy val `akka-actor` = "com.typesafe.akka" %% "akka-actor" % AkkaVersion
   lazy val `akka-stream` = "com.typesafe.akka" %% "akka-stream" % AkkaVersion

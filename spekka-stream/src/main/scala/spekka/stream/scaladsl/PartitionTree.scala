@@ -322,7 +322,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): OneForOne[K, PartitioningProps.SingleDynamicAuto[K], Lambda[M => M], Root] = {
       val prop = PartitioningProps.SingleDynamicAuto(extractor, completionCriteria, bufferSize)
-      OneForOne(prop, Root)
+      OneForOne[K, PartitioningProps.SingleDynamicAuto[K], Lambda[M => M], Root](prop, Root)
     }
 
     def dynamicAutoMulticast[K](
@@ -332,7 +332,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K, PartitioningProps.MultiDynamicAuto[K], Lambda[M => M], Root] = {
       val prop = PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
-      Multi(prop, Root)
+      Multi[K, PartitioningProps.MultiDynamicAuto[K], Lambda[M => M], Root](prop, Root)
     }
 
     def dynamicManual[K](
@@ -349,7 +349,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
           completionCriteria,
           bufferSize
         )
-      Optional(prop, Root)
+      Optional[K, PartitioningProps.SingleDynamicManual[K], Lambda[M => M], Root](prop, Root)
     }
 
     def dynamicManualMulticast[K](
@@ -361,7 +361,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       ): Multi[K, PartitioningProps.MultiDynamicManual[K], Lambda[M => M], Root] = {
       val prop =
         PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
-      Multi(prop, Root)
+      Multi[K, PartitioningProps.MultiDynamicManual[K], Lambda[M => M], Root](prop, Root)
     }
 
     def static[K](
@@ -369,7 +369,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         keys: Set[K]
       ): OneForOne[K, PartitioningProps.SingleStatic[K], Lambda[M => M], Root] = {
       val prop = PartitioningProps.SingleStatic(extractor, keys)
-      OneForOne(prop, Root)
+      OneForOne[K, PartitioningProps.SingleStatic[K], Lambda[M => M], Root](prop, Root)
     }
 
     def staticMulticast[K](
@@ -377,7 +377,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         keys: Set[K]
       ): Multi[K, PartitioningProps.MultiStatic[K], Lambda[M => M], Root] = {
       val prop = PartitioningProps.MultiStatic(extractor, keys)
-      Multi(prop, Root)
+      Multi[K, PartitioningProps.MultiStatic[K], Lambda[M => M], Root](prop, Root)
     }
   }
 
@@ -473,7 +473,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): OneForOne[K1, PartitioningProps.SingleDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
       val prop = PartitioningProps.SingleDynamicAuto(extractor, completionCriteria, bufferSize)
-      OneForOne(prop, this)
+      OneForOne[K1, PartitioningProps.SingleDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def dynamicAutoMulticast[K1](
@@ -483,7 +483,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
       val prop = PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def dynamicManual[K1](
@@ -500,7 +500,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
           completionCriteria,
           bufferSize
         )
-      Optional(prop, this)
+      Optional[K1, PartitioningProps.SingleDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def dynamicManualMulticast[K1](
@@ -512,7 +512,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       ): Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
       val prop =
         PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def static[K1](
@@ -520,7 +520,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         keys: Set[K1]
       ): OneForOne[K1, PartitioningProps.SingleStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
       val prop = PartitioningProps.SingleStatic(extractor, keys)
-      OneForOne(prop, this)
+      OneForOne[K1, PartitioningProps.SingleStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def staticMulticast[K1](
@@ -528,7 +528,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         keys: Set[K1]
       ): Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
       val prop = PartitioningProps.MultiStatic(extractor, keys)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
   }
 
@@ -614,7 +614,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         PartitioningProps.SingleDynamicAuto[K1](extractor, completionCriteria, bufferSize)
       val prop =
         PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleDynamicAuto[K1]](baseProp)
-      Optional(prop, this)
+      Optional[K1, PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleDynamicAuto[K1]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def dynamicAutoMulticast[K1](
@@ -624,7 +624,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
       val prop = PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def dynamicManual[K1](
@@ -641,7 +641,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
           completionCriteria,
           bufferSize
         )
-      Optional(prop, this)
+      Optional[K1, PartitioningProps.SingleDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def dynamicManualMulticast[K1](
@@ -653,7 +653,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       ): Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
       val prop =
         PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def static[K1](
@@ -663,7 +663,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       val baseProp = PartitioningProps.SingleStatic(extractor, keys)
       val prop =
         PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleStatic[K1]](baseProp)
-      Optional(prop, this)
+      Optional[K1, PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleStatic[K1]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def staticMulticast[K1](
@@ -671,7 +671,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         keys: Set[K1]
       ): Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
       val prop = PartitioningProps.MultiStatic(extractor, keys)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
   }
 
@@ -726,7 +726,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         PartitioningProps.SingleDynamicAuto[K1](extractor, completionCriteria, bufferSize)
       val prop =
         PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleDynamicAuto[K1]](baseProp)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleDynamicAuto[K1]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def dynamicAutoMulticast[K1](
@@ -736,7 +736,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
       val prop = PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def dynamicManual[K1](
@@ -755,7 +755,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         )
       val prop =
         PartitioningProps.OptionalAsMulti[K1, PartitioningProps.SingleDynamicManual[K1]](baseProp)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.OptionalAsMulti[K1, PartitioningProps.SingleDynamicManual[K1]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def dynamicManualMulticast[K1](
@@ -767,7 +767,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       ): Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
       val prop =
         PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def static[K1](
@@ -777,7 +777,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       val baseProp = PartitioningProps.SingleStatic(extractor, keys)
       val prop =
         PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleStatic[K1]](baseProp)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleStatic[K1]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]](prop, this)
     }
 
     def staticMulticast[K1](
@@ -785,7 +785,7 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         keys: Set[K1]
       ): Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
       val prop = PartitioningProps.MultiStatic(extractor, keys)
-      Multi(prop, this)
+      Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]](prop, this)
     }
   }
 }

@@ -64,7 +64,7 @@ class StreamBenchmarkRunner[T](
     val graph = Source
       .fromIterator(valuesIt)
       .take(n.toLong)
-      .via(flow)
+      .via[Any, Any](flow)
       .toMat(Sink.fold(0L) { case (acc, _) => acc + 1 })(Keep.right)
 
     runWarmup(graph)
