@@ -9,6 +9,8 @@ ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports"
 ThisBuild / semanticdbEnabled := true
 ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 
+ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
+
 inThisBuild(List(
   organization := "io.github.spekka",
   homepage := Some(url("https://github.com/spekka/spekka")),
