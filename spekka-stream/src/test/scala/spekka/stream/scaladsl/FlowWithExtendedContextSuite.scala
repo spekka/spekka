@@ -23,9 +23,10 @@ import akka.stream.scaladsl.Source
 import akka.stream.testkit.scaladsl.TestSink
 import spekka.stream.StreamSuite
 
-class FlowWithExtendedContextSuite extends StreamSuite(
+class FlowWithExtendedContextSuite
+    extends StreamSuite(
       "FlowWithExtendedContextSuite"
-    ){
+    ) {
 
   test("Connection to Source") {
     val preservedContextFlow = FlowWithExtendedContext[String, Int]
@@ -84,13 +85,12 @@ class FlowWithExtendedContextSuite extends StreamSuite(
 
   test("Conversion to Flow and back") {
     import FlowWithExtendedContext.syntax._
-    val preservedContextFlow: FlowWithExtendedContext[String, String, Int, NotUsed] = 
-    FlowWithExtendedContext[String, Int]
-      .map(s => s"$s-done")
-      .toFlow
-      .map { case (s, i) => s"${s}F" -> i}
-      .asFlowWithExtendedContextUnsafe
-      
+    val preservedContextFlow: FlowWithExtendedContext[String, String, Int, NotUsed] =
+      FlowWithExtendedContext[String, Int]
+        .map(s => s"$s-done")
+        .toFlow
+        .map { case (s, i) => s"${s}F" -> i }
+        .asFlowWithExtendedContextUnsafe
 
     val inputs = List("one", "two", "three").zipWithIndex
     val expected = inputs.map { case (s, i) => s"$s-doneF" -> i }
@@ -109,13 +109,12 @@ class FlowWithExtendedContextSuite extends StreamSuite(
 
   test("Conversion to FlowWithContext and back") {
     import FlowWithExtendedContext.syntax._
-    val preservedContextFlow: FlowWithExtendedContext[String, String, Int, NotUsed] = 
-    FlowWithExtendedContext[String, Int]
-      .map(s => s"$s-done")
-      .toFlowWithContext
-      .map(s => s"${s}FC")
-      .asFlowWithExtendedContextUnsafe
-      
+    val preservedContextFlow: FlowWithExtendedContext[String, String, Int, NotUsed] =
+      FlowWithExtendedContext[String, Int]
+        .map(s => s"$s-done")
+        .toFlowWithContext
+        .map(s => s"${s}FC")
+        .asFlowWithExtendedContextUnsafe
 
     val inputs = List("one", "two", "three").zipWithIndex
     val expected = inputs.map { case (s, i) => s"$s-doneFC" -> i }

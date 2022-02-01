@@ -16,17 +16,17 @@
 
 package spekka.stream.scaladsl
 
+import akka.NotUsed
 import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import akka.stream.testkit.TestPublisher
 import akka.stream.testkit.scaladsl.StreamTestKit.assertAllStagesStopped
+import spekka.stream.ExtendedContext
 import spekka.stream.SeqFlow
 import spekka.stream.StreamSuite
 
 import scala.concurrent.duration._
-import akka.NotUsed
-import spekka.stream.ExtendedContext
 
 object PartitionDynamicSuite {
   val config = """
@@ -84,8 +84,12 @@ class PartitionDynamicSuite
 
       val partitionedFlow = Partition.dynamicMulti[Int, Int, Long, Boolean, NotUsed](
         (v, _, keys) => if (v == 50) keys else Set(v % 2 == 0),
-        isEven => if (isEven) evenFlow.asFlowWithExtendedContextUnsafe else oddFlow.asFlowWithExtendedContextUnsafe,
-        FlowWithExtendedContext[Int, Long].map(_ => throw new IllegalStateException("Should not happen!")),
+        isEven =>
+          if (isEven) evenFlow.asFlowWithExtendedContextUnsafe
+          else oddFlow.asFlowWithExtendedContextUnsafe,
+        FlowWithExtendedContext[Int, Long].map(_ =>
+          throw new IllegalStateException("Should not happen!")
+        ),
         PartitionDynamic.CompletionCriteria.never
       )
 
@@ -118,7 +122,9 @@ class PartitionDynamicSuite
 
       val partitionedFlow = Partition.dynamicMulti[Int, Int, Long, Boolean, NotUsed](
         (v, _, _) => if (v == 50) Set.empty else Set(v % 2 == 0),
-        isEven => if (isEven) evenFlow.asFlowWithExtendedContextUnsafe else oddFlow.asFlowWithExtendedContextUnsafe,
+        isEven =>
+          if (isEven) evenFlow.asFlowWithExtendedContextUnsafe
+          else oddFlow.asFlowWithExtendedContextUnsafe,
         noneFlow.map { case (v, ctx) => -v -> ctx }.asFlowWithExtendedContextUnsafe,
         PartitionDynamic.CompletionCriteria.never
       )

@@ -41,9 +41,9 @@ import scala.concurrent.Promise
   * The sub stream functionality is modeled in a similar way to Akka with the goal of being usable
   * by user code.
   *
-  * SubStreams are formed by connecting a [[SubStream.SubOutlet]] to a [[SubStream.SubInlet]] and can
-  * be used to dynamically partition data flow inside a stage without creating async barriers (i.e.
-  * computation happen inside the main stage thread).
+  * SubStreams are formed by connecting a [[SubStream.SubOutlet]] to a [[SubStream.SubInlet]] and
+  * can be used to dynamically partition data flow inside a stage without creating async barriers
+  * (i.e. computation happen inside the main stage thread).
   */
 trait SubStream { self: GraphStageLogic =>
 
