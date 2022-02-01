@@ -42,7 +42,7 @@ object BaseBenchmark extends App {
 
   val flowExtCtxOrdered =
     StreamBenchmarkRunner.forGraph("flow-with-ext-ctx-ordered", Iterator.from(0).zipWithIndex)(
-      (FlowWithExtendedContext[Int, Int].map(_ * 2)).ordered
+      (FlowWithExtendedContext[Int, Int].map(_ * 2)).ordered()
     )
 
   try {

@@ -225,7 +225,7 @@ object Partition {
   /** Creates a dynamic partitioning flow with unicast distribution logic and manual partition
     * handler materialization.
     *
-    * Partition handlers can materialized/completed using the materialized [[Control]] interface.
+    * Partition handlers can materialized/completed using the materialized [[PartitionDynamic.Control]] interface.
     *
     * Inputs destined to non materialized partition are instead routed through the
     * `passthroughFlow`.
@@ -309,13 +309,13 @@ object Partition {
         )
       )
       .via(new Multiplexed.UnorderedMultiplexStage[Out, Ctx])
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a dynamic partitioning flow with multicast distribution logic and manual partition
     * handler materialization.
     *
-    * Partition handlers can materialized/completed using the materialized [[Control]] interface.
+    * Partition handlers can materialized/completed using the materialized [[PartitionDynamic.Control]] interface.
     *
     * Inputs destined to non materialized partition are instead routed through the
     * `passthroughFlow`.
@@ -363,7 +363,7 @@ object Partition {
         )
       )
       .via(new Multiplexed.UnorderedMultiplexStage[Out, Ctx])
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with unicast distribution logic and homogeneous flows.
@@ -403,7 +403,7 @@ object Partition {
         }
       )
       .mapMaterializedValue(_.zip(graphsSeq).map { case (m, (k, _)) => k -> m }.toMap)
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with unicast distribution logic and heterogeneous flows.
@@ -440,7 +440,7 @@ object Partition {
           }
         }
       )
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with unicast distribution logic and heterogeneous flows.
@@ -480,7 +480,7 @@ object Partition {
           }
         }
       )
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with unicast distribution logic and heterogeneous flows.
@@ -527,7 +527,7 @@ object Partition {
           }
         }
       )
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with unicast distribution logic and heterogeneous flows.
@@ -578,7 +578,7 @@ object Partition {
           }
         }
       )
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with multicast distribution logic and homogeneous flows.
@@ -617,7 +617,7 @@ object Partition {
         }
       )
       .mapMaterializedValue(_.zip(graphsSeq).map { case (m, (k, _)) => k -> m }.toMap)
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with multicast distribution logic and heterogeneous flows.
@@ -651,7 +651,7 @@ object Partition {
           }
         }
       )
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with multicast distribution logic and heterogeneous flows.
@@ -691,7 +691,7 @@ object Partition {
           }
         }
       )
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with multicast distribution logic and heterogeneous flows.
@@ -738,7 +738,7 @@ object Partition {
           }
         }
       )
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 
   /** Creates a static partitioning flow with multicast distribution logic and heterogeneous flows.
@@ -789,6 +789,6 @@ object Partition {
           }
         }
       )
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 }

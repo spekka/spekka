@@ -21,7 +21,6 @@ import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import akka.stream.testkit.TestPublisher
 import akka.stream.testkit.scaladsl.StreamTestKit.assertAllStagesStopped
-import spekka.stream.ExtendedContext
 import spekka.stream.SeqFlow
 import spekka.stream.StreamSuite
 
@@ -56,8 +55,8 @@ class PartitionDynamicSuite
       val partitionedFlow = Partition.dynamic[Int, Int, Long, Boolean, NotUsed](
         (v, _) => v % 2 == 0,
         isEven =>
-          if (isEven) evenFlow.asFlowWithPreservedContextUnsafe
-          else oddFlow.asFlowWithPreservedContextUnsafe,
+          if (isEven) evenFlow.asFlowWithExtendedContextUnsafe
+          else oddFlow.asFlowWithExtendedContextUnsafe,
         PartitionDynamic.CompletionCriteria.never
       )
 
@@ -85,7 +84,7 @@ class PartitionDynamicSuite
 
       val partitionedFlow = Partition.dynamicMulti[Int, Int, Long, Boolean, NotUsed](
         (v, _, keys) => if (v == 50) keys else Set(v % 2 == 0),
-        isEven => if (isEven) evenFlow.asFlowWithPreservedContextUnsafe else oddFlow.asFlowWithPreservedContextUnsafe,
+        isEven => if (isEven) evenFlow.asFlowWithExtendedContextUnsafe else oddFlow.asFlowWithExtendedContextUnsafe,
         FlowWithExtendedContext[Int, Long].map(_ => throw new IllegalStateException("Should not happen!")),
         PartitionDynamic.CompletionCriteria.never
       )
@@ -119,8 +118,8 @@ class PartitionDynamicSuite
 
       val partitionedFlow = Partition.dynamicMulti[Int, Int, Long, Boolean, NotUsed](
         (v, _, _) => if (v == 50) Set.empty else Set(v % 2 == 0),
-        isEven => if (isEven) evenFlow.asFlowWithPreservedContextUnsafe else oddFlow.asFlowWithPreservedContextUnsafe,
-        noneFlow.map { case (v, ctx) => -v -> ctx }.asFlowWithPreservedContextUnsafe,
+        isEven => if (isEven) evenFlow.asFlowWithExtendedContextUnsafe else oddFlow.asFlowWithExtendedContextUnsafe,
+        noneFlow.map { case (v, ctx) => -v -> ctx }.asFlowWithExtendedContextUnsafe,
         PartitionDynamic.CompletionCriteria.never
       )
 
@@ -158,8 +157,8 @@ class PartitionDynamicSuite
       val partitionedFlow = Partition.dynamic[Int, Int, Long, Boolean, NotUsed](
         (v, _) => v % 2 == 0,
         isEven =>
-          if (isEven) cancellingEvenFlow.asFlowWithPreservedContextUnsafe
-          else oddFlow.asFlowWithPreservedContextUnsafe,
+          if (isEven) cancellingEvenFlow.asFlowWithExtendedContextUnsafe
+          else oddFlow.asFlowWithExtendedContextUnsafe,
         PartitionDynamic.CompletionCriteria.never
       )
 
@@ -178,8 +177,8 @@ class PartitionDynamicSuite
       val partitionedFlow = Partition.dynamic[Int, Int, Long, Boolean, NotUsed](
         (v, _) => v % 2 == 0,
         isEven =>
-          if (isEven) evenFlow.asFlowWithPreservedContextUnsafe
-          else oddFlow.asFlowWithPreservedContextUnsafe,
+          if (isEven) evenFlow.asFlowWithExtendedContextUnsafe
+          else oddFlow.asFlowWithExtendedContextUnsafe,
         PartitionDynamic.CompletionCriteria.onInput(_ == 10)
       )
 
@@ -222,10 +221,10 @@ class PartitionDynamicSuite
         (v, _) => v % 2 == 0,
         isEven => {
           val flow =
-            if (isEven) evenFlow.asFlowWithPreservedContextUnsafe
-            else oddFlow.asFlowWithPreservedContextUnsafe
+            if (isEven) evenFlow.asFlowWithExtendedContextUnsafe
+            else oddFlow.asFlowWithExtendedContextUnsafe
 
-          flow.toFlowWithContext.map(_.toString).asFlowWithPreservedContextUnsafe
+          flow.toFlowWithContext.map(_.toString).asFlowWithExtendedContextUnsafe
         },
         PartitionDynamic.CompletionCriteria.onOutput(_ == "10")
       )
@@ -268,8 +267,8 @@ class PartitionDynamicSuite
       val partitionedFlow = Partition.dynamic[Int, Int, Long, Boolean, NotUsed](
         (v, _) => v % 2 == 0,
         isEven =>
-          if (isEven) evenFlow.asFlowWithPreservedContextUnsafe
-          else oddFlow.asFlowWithPreservedContextUnsafe,
+          if (isEven) evenFlow.asFlowWithExtendedContextUnsafe
+          else oddFlow.asFlowWithExtendedContextUnsafe,
         PartitionDynamic.CompletionCriteria.onIdle(100.millis)
       )
 

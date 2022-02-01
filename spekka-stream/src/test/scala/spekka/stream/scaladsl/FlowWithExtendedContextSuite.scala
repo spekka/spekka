@@ -89,7 +89,7 @@ class FlowWithExtendedContextSuite extends StreamSuite(
       .map(s => s"$s-done")
       .toFlow
       .map { case (s, i) => s"${s}F" -> i}
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
       
 
     val inputs = List("one", "two", "three").zipWithIndex
@@ -114,7 +114,7 @@ class FlowWithExtendedContextSuite extends StreamSuite(
       .map(s => s"$s-done")
       .toFlowWithContext
       .map(s => s"${s}FC")
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
       
 
     val inputs = List("one", "two", "three").zipWithIndex

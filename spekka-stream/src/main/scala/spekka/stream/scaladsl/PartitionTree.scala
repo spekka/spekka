@@ -289,21 +289,21 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
   }
 
   case object Root extends Root
-  implicit val rootCanBuildOneForOneT: Layer.CanBuildOneForOneT[Lambda[M => M], Root] =
+  private[PartitionTreeBuilder] implicit val rootCanBuildOneForOneT: Layer.CanBuildOneForOneT[Lambda[M => M], Root] =
     new Layer.CanBuildOneForOneT[Lambda[M => M], Root] {
       def buildOneForOne[O, M](
           layer: Root,
           flowF: Root#KS => FlowWithExtendedContext[In, O, Ctx, M]
         ): FlowWithExtendedContext[In, O, Ctx, M] = flowF(KNil)
     }
-  implicit val rootCanBuildOptionalT: Layer.CanBuildOptionalT[Lambda[M => M], Root] =
+  private[PartitionTreeBuilder] implicit val rootCanBuildOptionalT: Layer.CanBuildOptionalT[Lambda[M => M], Root] =
     new Layer.CanBuildOptionalT[Lambda[M => M], Root] {
       def buildOptional[O, M](
           layer: Root,
           flowF: Root#KS => FlowWithExtendedContext[In, Option[O], Ctx, M]
         ): FlowWithExtendedContext[In, Option[O], Ctx, M] = flowF(KNil)
     }
-  implicit val rootCanBuildMultiT: Layer.CanBuildMultiT[Lambda[M => M], Root] =
+  private[PartitionTreeBuilder] implicit val rootCanBuildMultiT: Layer.CanBuildMultiT[Lambda[M => M], Root] =
     new Layer.CanBuildMultiT[Lambda[M => M], Root] {
       def buildMulti[O, M](
           layer: Root,

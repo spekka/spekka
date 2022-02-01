@@ -213,12 +213,12 @@ private[spekka] object Multiplexed {
         val outCtx = ctx.push(MultiplexedContext(ctx.hashCode(), n))
         ins.iterator.map(_ -> outCtx).toList
       }
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
       .viaMat(elementFlow)(Keep.right)
       .via(
         Flow
           .fromGraph(new OrderedMultiplexStage[Out, Ctx])
-          .asFlowWithPreservedContextUnsafe
+          .asFlowWithExtendedContextUnsafe
       )
 
     val passthroughFlow

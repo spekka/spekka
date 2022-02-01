@@ -36,12 +36,12 @@ import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.Promise
 
-/** Mixin class for [[GraphStageLogic]] providing sub stream support.
+/** Mixin class for `GraphStageLogic` providing sub stream support.
   *
   * The sub stream functionality is modeled in a similar way to Akka with the goal of being usable
   * by user code.
   *
-  * SubStreams are formed by connecting a [[SubSteam.SubOutlet]] to a [[SubStream.SubInlet]] and can
+  * SubStreams are formed by connecting a [[SubStream.SubOutlet]] to a [[SubStream.SubInlet]] and can
   * be used to dynamically partition data flow inside a stage without creating async barriers (i.e.
   * computation happen inside the main stage thread).
   */

@@ -211,7 +211,7 @@ private[spekka] object Ordered {
 
   def apply[In, Out, Ctx, M](
       flow: FlowWithExtendedContext[In, Out, Ctx, M],
-      bufferSize: Int = 256
+      bufferSize: Int
     ): FlowWithExtendedContext[In, Out, Ctx, M] = {
     import FlowWithExtendedContext.syntax._
     Flow
@@ -226,6 +226,6 @@ private[spekka] object Ordered {
 
           FlowShape(preStage.in0, postStage.out0)
       })
-      .asFlowWithPreservedContextUnsafe
+      .asFlowWithExtendedContextUnsafe
   }
 }

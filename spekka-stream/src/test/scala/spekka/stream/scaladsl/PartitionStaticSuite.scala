@@ -21,7 +21,6 @@ import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import akka.stream.testkit.scaladsl.StreamTestKit.assertAllStagesStopped
-import spekka.stream.ExtendedContext
 import spekka.stream.SeqFlow
 import spekka.stream.StreamSuite
 import spekka.stream.ExtendedContext
@@ -53,10 +52,10 @@ class PartitionStaticSuite
 
       val partitionedFlow = Partition.staticMat[Int, Int, Long, Int, NotUsed, NotUsed, NotUsed](
         (v, _) => v % 10,
-        puFlow.asFlowWithPreservedContextUnsafe
+        puFlow.asFlowWithExtendedContextUnsafe
       )(
-        1 -> p1Flow.asFlowWithPreservedContextUnsafe,
-        2 -> p2Flow.asFlowWithPreservedContextUnsafe
+        1 -> p1Flow.asFlowWithExtendedContextUnsafe,
+        2 -> p2Flow.asFlowWithExtendedContextUnsafe
       )
 
       val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
@@ -87,10 +86,10 @@ class PartitionStaticSuite
 
       val partitionedFlow = Partition.staticMultiMat[Int, Int, Long, Int, NotUsed, NotUsed, NotUsed](
         (v, _, _) => Set(v % 10, 0),
-        puFlow.asFlowWithPreservedContextUnsafe
+        puFlow.asFlowWithExtendedContextUnsafe
       )(
-        0 -> p0Flow.asFlowWithPreservedContextUnsafe.map(-_),
-        1 -> p1Flow.asFlowWithPreservedContextUnsafe
+        0 -> p0Flow.asFlowWithExtendedContextUnsafe.map(-_),
+        1 -> p1Flow.asFlowWithExtendedContextUnsafe
       )
 
       val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
@@ -124,10 +123,10 @@ class PartitionStaticSuite
 
         val partitionedFlow = Partition.staticMat[Int, Int, Long, Int, Int, Int, Int](
           (v, _) => v % 10,
-          puFlow.asFlowWithPreservedContextUnsafe.mapMaterializedValue(_ => -1)
+          puFlow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => -1)
         )(
-          1 -> p1Flow.asFlowWithPreservedContextUnsafe.mapMaterializedValue(_ => 1),
-          2 -> p2Flow.asFlowWithPreservedContextUnsafe.mapMaterializedValue((_ => 2))
+          1 -> p1Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 1),
+          2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue((_ => 2))
         )
 
         val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
@@ -148,10 +147,10 @@ class PartitionStaticSuite
 
         val partitionedFlow = Partition.staticMultiMat[Int, Int, Long, Int, Int, Int, Int](
           (_, _, ks) => ks,
-          puFlow.asFlowWithPreservedContextUnsafe.mapMaterializedValue(_ => -1)
+          puFlow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => -1)
         )(
-          1 -> p1Flow.asFlowWithPreservedContextUnsafe.mapMaterializedValue(_ => 1),
-          2 -> p2Flow.asFlowWithPreservedContextUnsafe.mapMaterializedValue((_ => 2))
+          1 -> p1Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 1),
+          2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue((_ => 2))
         )
 
         val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
