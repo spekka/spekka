@@ -9,6 +9,20 @@ ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports"
 ThisBuild / semanticdbEnabled := true
 ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 
+inThisBuild(List(
+  organization := "io.github.spekka",
+  homepage := Some(url("https://github.com/spekka/spekka")),
+  licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
+  developers := List(
+    Developer(
+      "nivox",
+      "Andrea Zito",
+      "zito.andrea@gmail.com",
+      url("https://nivox.github.io")
+    )
+  )
+))
+
 
 lazy val commonSettings = Seq(
   scalacOptions --= Seq(
