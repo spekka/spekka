@@ -21,9 +21,9 @@ import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import akka.stream.testkit.scaladsl.StreamTestKit.assertAllStagesStopped
+import spekka.stream.ExtendedContext
 import spekka.stream.SeqFlow
 import spekka.stream.StreamSuite
-import spekka.stream.ExtendedContext
 
 object PartitionStaticSuite {
   val config = """
@@ -84,13 +84,14 @@ class PartitionStaticSuite
       val (p1Probe, p1Flow) = SeqFlow[Int, ExtendedContext[Long]]()
       val (puProbe, puFlow) = SeqFlow[Int, ExtendedContext[Long]]()
 
-      val partitionedFlow = Partition.staticMultiMat[Int, Int, Long, Int, NotUsed, NotUsed, NotUsed](
-        (v, _, _) => Set(v % 10, 0),
-        puFlow.asFlowWithExtendedContextUnsafe
-      )(
-        0 -> p0Flow.asFlowWithExtendedContextUnsafe.map(-_),
-        1 -> p1Flow.asFlowWithExtendedContextUnsafe
-      )
+      val partitionedFlow =
+        Partition.staticMultiMat[Int, Int, Long, Int, NotUsed, NotUsed, NotUsed](
+          (v, _, _) => Set(v % 10, 0),
+          puFlow.asFlowWithExtendedContextUnsafe
+        )(
+          0 -> p0Flow.asFlowWithExtendedContextUnsafe.map(-_),
+          1 -> p1Flow.asFlowWithExtendedContextUnsafe
+        )
 
       val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
       val doneF = src.via(partitionedFlow).runWith(Sink.seq)
@@ -114,52 +115,53 @@ class PartitionStaticSuite
     }
   }
 
-
   test("materialized values are correctly combined for single") {
-      assertAllStagesStopped {
-        val (_, p1Flow) = SeqFlow[Int, ExtendedContext[Long]]()
-        val (_, p2Flow) = SeqFlow[Int, ExtendedContext[Long]]()
-        val (_, puFlow) = SeqFlow[Int, ExtendedContext[Long]]()
+    assertAllStagesStopped {
+      val (_, p1Flow) = SeqFlow[Int, ExtendedContext[Long]]()
+      val (_, p2Flow) = SeqFlow[Int, ExtendedContext[Long]]()
+      val (_, puFlow) = SeqFlow[Int, ExtendedContext[Long]]()
 
-        val partitionedFlow = Partition.staticMat[Int, Int, Long, Int, Int, Int, Int](
-          (v, _) => v % 10,
-          puFlow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => -1)
-        )(
-          1 -> p1Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 1),
-          2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue((_ => 2))
-        )
+      val partitionedFlow = Partition.staticMat[Int, Int, Long, Int, Int, Int, Int](
+        (v, _) => v % 10,
+        puFlow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => -1)
+      )(
+        1 -> p1Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 1),
+        2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue((_ => 2))
+      )
 
-        val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
-        val ((p1M, p2M, puM), doneF) = src.viaMat(partitionedFlow)(Keep.right).toMat(Sink.seq)(Keep.both).run()
+      val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
+      val ((p1M, p2M, puM), doneF) =
+        src.viaMat(partitionedFlow)(Keep.right).toMat(Sink.seq)(Keep.both).run()
 
-        flattenContext(doneF.futureValue)
-        p1M shouldEqual 1
-        p2M shouldEqual 2
-        puM shouldEqual -1
-      }
+      flattenContext(doneF.futureValue)
+      p1M shouldEqual 1
+      p2M shouldEqual 2
+      puM shouldEqual -1
     }
+  }
 
   test("materialized values are correctly combined for multi") {
-      assertAllStagesStopped {
-        val (_, p1Flow) = SeqFlow[Int, ExtendedContext[Long]]()
-        val (_, p2Flow) = SeqFlow[Int, ExtendedContext[Long]]()
-        val (_, puFlow) = SeqFlow[Int, ExtendedContext[Long]]()
+    assertAllStagesStopped {
+      val (_, p1Flow) = SeqFlow[Int, ExtendedContext[Long]]()
+      val (_, p2Flow) = SeqFlow[Int, ExtendedContext[Long]]()
+      val (_, puFlow) = SeqFlow[Int, ExtendedContext[Long]]()
 
-        val partitionedFlow = Partition.staticMultiMat[Int, Int, Long, Int, Int, Int, Int](
-          (_, _, ks) => ks,
-          puFlow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => -1)
-        )(
-          1 -> p1Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 1),
-          2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue((_ => 2))
-        )
+      val partitionedFlow = Partition.staticMultiMat[Int, Int, Long, Int, Int, Int, Int](
+        (_, _, ks) => ks,
+        puFlow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => -1)
+      )(
+        1 -> p1Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 1),
+        2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue((_ => 2))
+      )
 
-        val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
-        val ((p1M, p2M, puM), doneF) = src.viaMat(partitionedFlow)(Keep.right).toMat(Sink.seq)(Keep.both).run()
+      val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
+      val ((p1M, p2M, puM), doneF) =
+        src.viaMat(partitionedFlow)(Keep.right).toMat(Sink.seq)(Keep.both).run()
 
-        flattenContext(doneF.futureValue)
-        p1M shouldEqual 1
-        p2M shouldEqual 2
-        puM shouldEqual -1
-      }
+      flattenContext(doneF.futureValue)
+      p1M shouldEqual 1
+      p2M shouldEqual 2
+      puM shouldEqual -1
     }
+  }
 }

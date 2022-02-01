@@ -63,11 +63,11 @@ trait FlowWithExtendedContextSyntax {
   implicit class FlowWithExtendedContextListOps[In, OutE, Out <: immutable.Iterable[OutE], Ctx, M](
       backingFlow: FlowWithExtendedContext[In, Out, Ctx, M]) {
 
-    /**
-      * Transform this flow by piping each element of the output through the given flow, recombining 
+    /** Transform this flow by piping each element of the output through the given flow, recombining
       * the results back into a collection.
       *
-      * @param flow the flow used to transform each output elements
+      * @param flow
+      *   the flow used to transform each output elements
       */
     def viaMultiplexed[Out2](
         flow: FlowWithExtendedContext[OutE, Out2, Ctx, _]
@@ -103,8 +103,8 @@ object FlowWithExtendedContext extends FlowWithExtendedContextSyntax {
   object syntax extends FlowWithExtendedContextSyntax
 }
 
-/** A [[FlowWithExtendedContext]] is much like a `FlowWithContext` but with the following
-  * additional guarantees: any given input will be transformed into exactly one output.
+/** A [[FlowWithExtendedContext]] is much like a `FlowWithContext` but with the following additional
+  * guarantees: any given input will be transformed into exactly one output.
   *
   * A [[FlowWithExtendedContext]] can be used to model effectively-once semantics.
   *
@@ -212,22 +212,22 @@ final class FlowWithExtendedContext[-In, +Out, Ctx, +M] private[scaladsl] (
     ): FlowWithExtendedContext[In, Out, Ctx, M] =
     toFlowWithContext.mapContext(f).asFlowWithExtendedContextUnsafe
 
-  /**
-   * Equivalent of `Flow.mapMaterializedValue`
-   * 
-   * @param f the materialization value transformation function
-   */
+  /** Equivalent of `Flow.mapMaterializedValue`
+    *
+    * @param f
+    *   the materialization value transformation function
+    */
   def mapMaterializedValue[M2](f: M => M2): FlowWithExtendedContext[In, Out, Ctx, M2] =
     toFlowWithContext.mapMaterializedValue(f).asFlowWithExtendedContextUnsafe
 
-  /**
-   * Make the output of this flow be emitted in the same order as the corresponding input.
-   * 
-   * The resulting flow will allow up to `bufferSize` elements to be processed before back-pressuring.
-   * Back-pressure is relieved when the next in-order output is produced.
-   * 
-   * @param bufferSize the size of the unordered buffer
-   * 
-   */
-  def ordered(bufferSize: Int = 256): FlowWithExtendedContext[In, Out, Ctx, M] = Ordered(this, bufferSize)
+  /** Make the output of this flow be emitted in the same order as the corresponding input.
+    *
+    * The resulting flow will allow up to `bufferSize` elements to be processed before
+    * back-pressuring. Back-pressure is relieved when the next in-order output is produced.
+    *
+    * @param bufferSize
+    *   the size of the unordered buffer
+    */
+  def ordered(bufferSize: Int = 256): FlowWithExtendedContext[In, Out, Ctx, M] =
+    Ordered(this, bufferSize)
 }

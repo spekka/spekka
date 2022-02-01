@@ -16,14 +16,14 @@
 
 package spekka.stream.scaladsl
 
-import spekka.stream.StreamSuite
-import akka.stream.scaladsl.Source
-import akka.stream.scaladsl.Sink
+import akka.Done
+import akka.NotUsed
 import akka.stream.scaladsl.Keep
+import akka.stream.scaladsl.Sink
+import akka.stream.scaladsl.Source
 import akka.stream.testkit.TestPublisher
 import akka.stream.testkit.TestSubscriber
-import akka.NotUsed
-import akka.Done
+import spekka.stream.StreamSuite
 
 class PartitionTreeBuilderSuite extends StreamSuite("PartitionTreeBuilderSuite") {
 
@@ -36,7 +36,8 @@ class PartitionTreeBuilderSuite extends StreamSuite("PartitionTreeBuilderSuite")
   case class Output[KS](keys: KS, input: Input)
 
   test("single layer dynamic auto") {
-    val flow = Partition.treeBuilder[Input, Long]
+    val flow = Partition
+      .treeBuilder[Input, Long]
       .dynamicAuto { case (in, _) => in.k1 }
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
 
@@ -57,7 +58,8 @@ class PartitionTreeBuilderSuite extends StreamSuite("PartitionTreeBuilderSuite")
   }
 
   test("single layer dynamic manual pre instantiated") {
-    val flow = Partition.treeBuilder[Input, Long]
+    val flow = Partition
+      .treeBuilder[Input, Long]
       .dynamicManual({ case (in, _) => in.k1 }, Set(1, 2))
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
 
@@ -78,7 +80,8 @@ class PartitionTreeBuilderSuite extends StreamSuite("PartitionTreeBuilderSuite")
   }
 
   test("single layer dynamic manual partially instantiated") {
-    val flow = Partition.treeBuilder[Input, Long]
+    val flow = Partition
+      .treeBuilder[Input, Long]
       .dynamicManual({ case (in, _) => in.k1 }, Set(1))
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
 
@@ -101,7 +104,8 @@ class PartitionTreeBuilderSuite extends StreamSuite("PartitionTreeBuilderSuite")
   }
 
   test("single layer dynamic manual dynamically instantiated") {
-    val flow = Partition.treeBuilder[Input, Long]
+    val flow = Partition
+      .treeBuilder[Input, Long]
       .dynamicManual({ case (in, _) => in.k1 }, Set.empty)
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
 
@@ -148,7 +152,8 @@ class PartitionTreeBuilderSuite extends StreamSuite("PartitionTreeBuilderSuite")
   }
 
   test("dual layer dynamic manual dynamically instantiated") {
-    val flow = Partition.treeBuilder[Input, Long]
+    val flow = Partition
+      .treeBuilder[Input, Long]
       .dynamicManual({ case (in, _) => in.k1 }, Set.empty)
       .dynamicManual({ case (in, _) => in.k2 }, Set.empty)
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
@@ -203,7 +208,8 @@ class PartitionTreeBuilderSuite extends StreamSuite("PartitionTreeBuilderSuite")
   }
 
   test("dual layer multi dynamic auto") {
-    val flow = Partition.treeBuilder[Input, Long]
+    val flow = Partition
+      .treeBuilder[Input, Long]
       .dynamicAutoMulticast[Int] { case (in, _, ks) =>
         if (in.k1 == 0) ks
         else Set(in.k1)
@@ -221,7 +227,7 @@ class PartitionTreeBuilderSuite extends StreamSuite("PartitionTreeBuilderSuite")
       Input(2, "a", true, 4),
       Input(2, "b", true, 5),
       Input(2, "*", false, 6),
-      Input(0, "*", false, 7),
+      Input(0, "*", false, 7)
     )
 
     val expected = List(
@@ -237,8 +243,10 @@ class PartitionTreeBuilderSuite extends StreamSuite("PartitionTreeBuilderSuite")
     val (_, result) =
       Source(inputs).zipWithIndex.viaMat(flow)(Keep.right).toMat(Sink.seq)(Keep.both).run()
     val data = result.futureValue
-    
-    val dataSorted = data.map { case (ks, ctx) => ks.toList.sortBy { case k2 :: k1 :: KNil => k1 -> k2 } -> ctx }
+
+    val dataSorted = data.map { case (ks, ctx) =>
+      ks.toList.sortBy { case k2 :: k1 :: KNil => k1 -> k2 } -> ctx
+    }
     dataSorted should contain theSameElementsAs expected
   }
 }

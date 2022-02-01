@@ -225,7 +225,8 @@ object Partition {
   /** Creates a dynamic partitioning flow with unicast distribution logic and manual partition
     * handler materialization.
     *
-    * Partition handlers can materialized/completed using the materialized [[PartitionDynamic.Control]] interface.
+    * Partition handlers can materialized/completed using the materialized
+    * [[PartitionDynamic.Control]] interface.
     *
     * Inputs destined to non materialized partition are instead routed through the
     * `passthroughFlow`.
@@ -315,7 +316,8 @@ object Partition {
   /** Creates a dynamic partitioning flow with multicast distribution logic and manual partition
     * handler materialization.
     *
-    * Partition handlers can materialized/completed using the materialized [[PartitionDynamic.Control]] interface.
+    * Partition handlers can materialized/completed using the materialized
+    * [[PartitionDynamic.Control]] interface.
     *
     * Inputs destined to non materialized partition are instead routed through the
     * `passthroughFlow`.
