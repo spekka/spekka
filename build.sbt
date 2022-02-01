@@ -10,6 +10,7 @@ ThisBuild / semanticdbEnabled := true
 ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 
 ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
+ThisBuild / versionScheme := Some("semver-spec")
 
 inThisBuild(List(
   organization := "io.github.spekka",
@@ -42,8 +43,13 @@ lazy val commonSettings = Seq(
 
 lazy val `spekka-docs` = project
   .enablePlugins(ParadoxPlugin)
+  .enablePlugins(GitHubPagesPlugin)
   .settings(
     paradoxTheme := Some(builtinParadoxTheme("generic")),
+    gitHubPagesOrgName := "spekka",
+    gitHubPagesRepoName := "spekka.github.io",
+    gitHubPagesSiteDir := target.value / "paradox" / "site" / "main",
+    gitHubPagesBranch := "master",
     headerLicense := Some(HeaderLicense.ALv2("2022", "Andrea Zito")),
     publish := false
   )
