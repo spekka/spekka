@@ -12,10 +12,9 @@ RUN . /home/gitpod/.sdkman/bin/sdkman-init.sh && \
 
 RUN mkdir -p /home/gitpod/.local/share/bash-completion/completions
 
-RUN cd /tmp && curl -fLo cs https://git.io/coursier-cli-"$(uname | tr LD ld)" && \
+RUN cd /tmp && curl -fL https://github.com/coursier/launchers/raw/master/cs-"$(uname -m)"-pc-"$(uname | tr LD ld)".gz | gzip -d > cs && \
     chmod a+x ./cs && \
-    ./cs install cs && \
-    echo "export PATH=\"$PATH:/home/gitpod/.local/share/coursier/bin\"" > ~/.bashrc.d/coursier && \
-    ./cs install bloop ammonite && \
+    ./cs setup -y && \
+    ./cs install bloop scalafmt scalafix ammonite && \
     curl -o /home/gitpod/.local/share/bash-completion/completions/bloop https://raw.githubusercontent.com/scalacenter/bloop/master/etc/bash-completions
     
