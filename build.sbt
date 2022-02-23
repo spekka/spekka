@@ -71,6 +71,7 @@ lazy val `spekka-stream` = project
   .settings(commonSettings)
   .settings(
     libraryDependencies ++= Seq(
+      `akka-actor-typed` % "provided",
       `akka-stream` % "provided",
       `akka-stream-testkit` % Test
     ),
