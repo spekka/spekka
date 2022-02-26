@@ -17,7 +17,7 @@ object StatefulFlowLogic {
       new ProcessingResult(events :+ ev, beforeUpdateSideEffects, afterUpdateSideEffects)
 
     def withEvents(ev: immutable.Seq[Ev]): ProcessingResult[Ev] =
-      new ProcessingResult(events :++ ev, beforeUpdateSideEffects, afterUpdateSideEffects)
+      new ProcessingResult(events ++ ev, beforeUpdateSideEffects, afterUpdateSideEffects)
 
     def withBeforeUpdateSideEffect(sideEffect: () => Future[_]): ProcessingResult[Ev] =
       new ProcessingResult(events, beforeUpdateSideEffects :+ sideEffect, afterUpdateSideEffects)
