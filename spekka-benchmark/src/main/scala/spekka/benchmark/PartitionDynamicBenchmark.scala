@@ -18,9 +18,9 @@ package spekka.benchmark
 
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Flow
-import spekka.stream.scaladsl.FlowWithExtendedContext
-import spekka.stream.scaladsl.Partition
-import spekka.stream.scaladsl.PartitionDynamic
+import spekka.context.FlowWithExtendedContext
+import spekka.context.Partition
+import spekka.context.PartitionDynamic
 
 object PartitionDynamicBenchmark extends App {
 

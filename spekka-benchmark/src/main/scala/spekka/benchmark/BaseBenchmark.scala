@@ -19,7 +19,7 @@ package spekka.benchmark
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.FlowWithContext
-import spekka.stream.scaladsl.FlowWithExtendedContext
+import spekka.context.FlowWithExtendedContext
 
 object BaseBenchmark extends App {
 
