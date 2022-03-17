@@ -23,65 +23,185 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 
 object PartitionTree {
+
+  /**
+  * Represents a typed sequence of keys in a partition tree.
+  *
+  * By construction, the order of the keys is the reversed w.r.t. the partitioning order.
+  *
+  * {{{
+  * case class Input(k1: Int, k2: String, k3: Boolean)
+  * 
+  * Partition.treeBuilder[Input, NotUsed]
+  *   .dynamicAuto { case (in, _) => in.k1 }
+  *   .dynamicAuto { case (in, _) => in.k2 }
+  *   .dynamicAuto { case (in, _) => in.k3 }
+  *   .build { case k3 :: k2 :: k1 :: KNil => 
+  *     FlowWithExtendedContext[Input, NotUsed].map { _ =>
+  *      (k1, k2, k3)
+  *     }
+  *   }
+  * }}}
+  */
   sealed trait KSeq
   object KSeq {
     implicit class KSeqOpts[KS <: KSeq](kseq: KS) {
       def ::[H](h: H): H :: KS = new ::(h, kseq)
     }
   }
+
+  /**
+  * Constructor for key sequences.
+  */
   final case class ::[H, T <: KSeq](head: H, tail: T) extends KSeq
+
+  /**
+  * Terminal element in a key sequence.
+  */
   sealed trait KNil extends KSeq {
     def ::[H](h: H): H :: KNil = new ::(h, this)
   }
   case object KNil extends KNil
 
+  /**
+    * Base partition control object.
+    * 
+    * Can be either a [[PartitionControl.DynamicControl]] or [[PartitionControl.StaticControl]].
+    */
   sealed trait PartitionControl
+
+  /**
+    * Partition control namespace object
+    */
   object PartitionControl {
-    final class StaticControl[K, M](layer: Map[K, M]) extends PartitionControl {
-      def atKey(k: K): PControlResult[M] = PControlResult(_ => Future.successful(layer.get(k)))
+    /**
+    * Control for static partitions.
+    */
+    final class StaticControl[K, M] private[spekka](layer: Map[K, M]) extends PartitionControl {
+
+      /**
+        * Retrieve the materialization value of the partition with the specified key.
+        *
+        * @param k The partition key to retrieve the materialization of.
+        * @return A control result containing the materialized value of the specified partition.
+        */
+      def atKey(k: K): ControlResult[M] = new ControlResult(_ => Future.successful(layer.get(k)))
     }
 
-    final class DynamicControl[K, M](layer: PartitionDynamic.Control[K, M])
+    /**
+      * Control for dynamic partitions.
+      */
+    final class DynamicControl[K, M] private[spekka](layer: PartitionDynamic.Control[K, M])
         extends PartitionControl {
-      def atKey(k: K): PControlResult[M] =
-        PControlResult(_ => layer.withKeyMaterializedValue(k)(identity))
 
-      def atKeyForced(k: K): PControlResult[M] =
-        PControlResult { ec: ExecutionContext =>
+      /**
+        * Retrieve the materialization value of the partition with the specified key.
+        *
+        * @param k The partition key to retrieve the materialization of.
+        * @return A control result containing the materialized value of the specified partition.
+        */
+      def atKey(k: K): ControlResult[M] =
+        new ControlResult(_ => layer.withKeyMaterializedValue(k)(identity))
+
+      /**
+        * Retrieve the materialization value of the partition with the specified key, forcing
+        * the materialization of the partition in case it wasn't already materialized.
+        *
+        * @param k The partition key to retrieve the materialization of.
+        * @return A control result containing the materialized value of the specified partition.
+        */
+      def atKeyForced(k: K): ControlResult[M] =
+        new ControlResult((ec: ExecutionContext) =>
           layer
             .withKeyMaterializedValue(k)(identity)
             .flatMap {
               case Some(v) => Future.successful(Some(v))
               case None => layer.materializeKey(k).map(Some(_))(ec)
             }(ec)
-        }
+        )
 
-      def completeKey(k: K): PControlResult[Done] =
-        PControlResult(ec => layer.completeKey(k).map(Some(_))(ec))
+      /**
+        * Completes the partition with the specified key.
+        *
+        * @param k The partition key to complete.
+        * @return A control result indicating the success of the completion process.
+        */
+      def completeKey(k: K): ControlResult[Done] =
+        new ControlResult(ec => layer.completeKey(k).map(Some(_))(ec))
 
-      def materializeKey(k: K): PControlResult[M] =
-        PControlResult(ec => layer.materializeKey(k).map(Some(_))(ec))
+      /**
+        * Request the materialization of the specified partition key and return its materialized value.
+        *
+        * In case the partition was already materialized, it just returns its materialized value.
+        *
+        * @param k The partition key to materialize
+        * @return A control result containing the materialization value of the newly materialized partition.
+        */
+      def materializeKey(k: K): ControlResult[M] =
+        new ControlResult(ec => layer.materializeKey(k).map(Some(_))(ec))
 
-      def rematerializeKey(k: K): PControlResult[(Option[M], M)] =
-        PControlResult(ec => layer.rematerializeKey(k).map(Some(_))(ec))
+      /**
+      * Request the re-materialization (i.e. completion followed by materialization) of the specified partition key.
+      *
+      * @param k The partition key to re-materialize
+      * @return A control result containing the materialization value of the completed partition (if present)
+      *         and the materialization value of the newly materialized partition
+      */
+      def rematerializeKey(k: K): ControlResult[(Option[M], M)] =
+        new ControlResult(ec => layer.rematerializeKey(k).map(Some(_))(ec))
     }
 
-    case class PControlResult[T](resultF: ExecutionContext => Future[Option[T]]) {
-      def map[U](f: T => U): PControlResult[U] = {
+    /**
+      * A description of the operation to be performed on a [[PartitionControl]] object to 
+      * obtain a result.
+      *
+      * Allows for monadic interaction with partition trees and defers the execution
+      * of the described operations until explicitly requested via the [[run]] method.
+      *
+      * {{{
+      *  (for {
+      *     r1 <- control.materializeKey(1)
+      *     r2 <- control.materializeKey(2)
+      *   } yield r1 -> r2).run
+      * }}}
+      */
+    final class ControlResult[T]private [spekka](resultF: ExecutionContext => Future[Option[T]]) {
+      /**
+        * Transform the value held by this control result object
+        *
+        * @param f transform function
+        * @return A new control result containing the transformed value
+        */
+      def map[U](f: T => U): ControlResult[U] = {
         val resultF1 = (e: ExecutionContext) => resultF(e).map(_.map(f))(e)
-        PControlResult(resultF1)
+        new ControlResult(resultF1)
       }
 
-      def flatMap[U](f: T => PControlResult[U]): PControlResult[U] = {
+      /**
+        * Transforms this control result by using its value to build a new control result.
+        *
+        * @param f transform function
+        * @return A new control result containing the new control result
+        */
+      def flatMap[U](f: T => ControlResult[U]): ControlResult[U] = {
         val resultF1 = (e: ExecutionContext) =>
           resultF(e).flatMap {
             case Some(result) => f(result).run(e)
             case None => Future.successful(None)
           }(e)
 
-        PControlResult(resultF1)
+        new ControlResult(resultF1)
       }
 
+      /**
+        * Execute the actions described in this control result and returns the final 
+        * value of the execution.
+        *
+        * The same instance can be run multiple time to performs the described actions again.
+        *
+        * @param ec The execution context used to chain async operations.
+        * @return The final value of the actions described by this control result.
+        */
       def run(implicit ec: ExecutionContext): Future[Option[T]] = {
         resultF(ec)
       }
@@ -89,28 +209,63 @@ object PartitionTree {
   }
 }
 
+/**
+  * Builder for partition trees.
+  *
+  * {{{
+  * case class Input(k1: Int, k2: String, k3: Boolean)
+  * 
+  * Partition.treeBuilder[Input, NotUsed]
+  *   .dynamicAuto { case (in, _) => in.k1 }
+  *   .dynamicAuto { case (in, _) => in.k2 }
+  *   .dynamicAuto { case (in, _) => in.k3 }
+  *   .build { case k3 :: k2 :: k1 :: KNil => 
+  *     FlowWithExtendedContext[Input, NotUsed].map { _ =>
+  *      (k1, k2, k3)
+  *     }
+  *   }
+  * }}}
+  * 
+  * @tparam In The input type of the partitioned flow to be constructed
+  * @tparam Ctx The base context type of the partitioned flow to be constructed
+  */
 class PartitionTreeBuilder[In, Ctx] private[spekka] {
   import PartitionTree._
 
+  /**
+    * Properties of a partition layer
+    */
   sealed trait PartitioningProps[K] {
     private[PartitionTreeBuilder] type MV[M]
     private[PartitionTreeBuilder] type FOut[O]
 
-    def build[O, M](
+    private[spekka] def build[O, M](
         flowF: K => FlowWithExtendedContext[In, O, Ctx, M]
       ): FlowWithExtendedContext[In, FOut[O], Ctx, MV[M]]
   }
 
+  /**
+  * Partitioning properties namespace object
+  */
   object PartitioningProps {
+    /**
+      * Simple partitioning where an input corresponds to one output
+      */
     sealed trait OneForOne[K] extends PartitioningProps[K] {
       override private[PartitionTreeBuilder] type FOut[O] = O
     }
 
+    /**
+      * Partitioning where an input may correspond to zero or one output
+      */
     sealed trait Optional[K] extends PartitioningProps[K] {
       override private[PartitionTreeBuilder] type FOut[O] = Option[O]
     }
 
-    case class OneForOneAsOptional[K, P <: OneForOne[K]](oneForOne: P) extends Optional[K] {
+    /**
+      * [[OneForOne]] adapter for [[Optional]]
+      */
+    class OneForOneAsOptional[K, P <: OneForOne[K]]private[spekka](oneForOne: P) extends Optional[K] {
       override private[PartitionTreeBuilder] type MV[M] = P#MV[M]
       override def build[O, M](
           flowF: K => FlowWithExtendedContext[In, O, Ctx, M]
@@ -119,11 +274,17 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
+    /**
+      * Partitioning where an input correspond to multiple outputs
+      */
     sealed trait Multi[K] extends PartitioningProps[K] {
       override private[PartitionTreeBuilder] type FOut[O] = immutable.Iterable[O]
     }
 
-    case class OneForOneAsMulti[K, P <: OneForOne[K]](oneForOne: P) extends Multi[K] {
+    /**
+      * [[OneForOne]] adapter for [[Multi]]
+      */
+    class OneForOneAsMulti[K, P <: OneForOne[K]] private[spekka](oneForOne: P) extends Multi[K] {
       override private[PartitionTreeBuilder] type MV[M] = P#MV[M]
       override def build[O, M](
           flowF: K => FlowWithExtendedContext[In, O, Ctx, M]
@@ -132,7 +293,10 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
-    case class OptionalAsMulti[K, P <: Optional[K]](optional: P) extends Multi[K] {
+    /**
+      * [[Optional]] adapter for [[Multi]]
+      */
+    class OptionalAsMulti[K, P <: Optional[K]] private[spekka](optional: P) extends Multi[K] {
       override private[PartitionTreeBuilder] type MV[M] = P#MV[M]
       override def build[O, M](
           flowF: K => FlowWithExtendedContext[In, O, Ctx, M]
@@ -141,7 +305,10 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
-    case class SingleDynamicAuto[K](
+    /**
+      * Dynamic unicast partitioning properties with automatic materialization
+      */
+    class SingleDynamicAuto[K] private[spekka](
         extractor: (In, Ctx) => K,
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx],
         bufferSize: Int)
@@ -155,7 +322,10 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
           .mapMaterializedValue(new PartitionControl.DynamicControl[K, M](_))
     }
 
-    case class SingleDynamicManual[K](
+    /**
+      * Dynamic unicast partitioning properties with manual materialization
+      */
+    class SingleDynamicManual[K] private[spekka](
         extractor: (In, Ctx) => K,
         initialKeys: Set[K],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx],
@@ -180,7 +350,10 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
-    case class MultiDynamicAuto[K](
+    /**
+      * Dynamic multicast partitioning properties with automatic materialization
+      */
+    class MultiDynamicAuto[K] private[spekka](
         extractor: (In, Ctx, Set[K]) => Set[K],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx],
         bufferSize: Int)
@@ -198,7 +371,10 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
-    case class MultiDynamicManual[K](
+    /**
+      * Dynamic multicast partitioning properties with manual materialization
+      */
+    class MultiDynamicManual[K] private[spekka](
         extractor: (In, Ctx, Set[K]) => Set[K],
         initialKeys: Set[K],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx],
@@ -224,7 +400,10 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
-    case class SingleStatic[K](
+    /**
+      * Static unicast partitioning properties
+      */
+    class SingleStatic[K] private[spekka](
         extractor: (In, Ctx) => K,
         keys: Set[K])
         extends OneForOne[K] {
@@ -242,7 +421,10 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
-    case class MultiStatic[K](
+    /**
+      * Static multicast partitioning properties
+      */
+    class MultiStatic[K] private[spekka](
         extractor: (In, Ctx, Set[K]) => Set[K],
         keys: Set[K])
         extends Multi[K] {
@@ -260,6 +442,9 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
     }
   }
 
+  /**
+    * Partition layer
+    */
   sealed trait Layer[MV[_]] {
     private[PartitionTreeBuilder] type FOut[O]
     private[PartitionTreeBuilder] type KS <: KSeq
@@ -314,30 +499,70 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         ): FlowWithExtendedContext[In, immutable.Iterable[O], Ctx, M] = flowF(KNil)
     }
 
+  /**
+    * Root partition layer
+    */
   sealed trait Root extends Layer[Lambda[M => M]] {
     override private[PartitionTreeBuilder] type FOut[O] = O
     override private[PartitionTreeBuilder] type KS = KNil
 
+    /**
+      * Creates a dynamic unicast partition layer with automatic materialization.
+      * 
+      * Each input will be routed to exactly one partition which will be automatically
+      * materialized on the first element.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicAuto[K](
         extractor: (In, Ctx) => K,
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): OneForOne[K, PartitioningProps.SingleDynamicAuto[K], Lambda[M => M], Root] = {
-      val prop = PartitioningProps.SingleDynamicAuto(extractor, completionCriteria, bufferSize)
-      OneForOne[K, PartitioningProps.SingleDynamicAuto[K], Lambda[M => M], Root](prop, Root)
+      val prop = new PartitioningProps.SingleDynamicAuto(extractor, completionCriteria, bufferSize)
+      new OneForOne[K, PartitioningProps.SingleDynamicAuto[K], Lambda[M => M], Root](prop, Root)
     }
 
+    /**
+      * Creates a dynamic multicast partition layer with automatic materialization.
+      *
+      * Each input will be routed to a variable number of partitions which will be automatically
+      * materialized on the first element.
+      *
+      * Input mapped to an empty set of partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partitions
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicAutoMulticast[K](
         extractor: (In, Ctx, Set[K]) => Set[K],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K, PartitioningProps.MultiDynamicAuto[K], Lambda[M => M], Root] = {
-      val prop = PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
-      Multi[K, PartitioningProps.MultiDynamicAuto[K], Lambda[M => M], Root](prop, Root)
+      val prop = new PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
+      new Multi[K, PartitioningProps.MultiDynamicAuto[K], Lambda[M => M], Root](prop, Root)
     }
 
+    /**
+      * Creates a dynamic unicast partition layer with manual materialization.
+      * 
+      * Each input will be routed to exactly one partition which must be materialized manually.
+      *
+      * Input destined to non materialized partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param initialKeys the set of keys to materialized when the layer is initialized
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicManual[K](
         extractor: (In, Ctx) => K,
         initialKeys: Set[K],
@@ -346,15 +571,28 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Optional[K, PartitioningProps.SingleDynamicManual[K], Lambda[M => M], Root] = {
       val prop =
-        PartitioningProps.SingleDynamicManual(
+        new PartitioningProps.SingleDynamicManual(
           extractor,
           initialKeys,
           completionCriteria,
           bufferSize
         )
-      Optional[K, PartitioningProps.SingleDynamicManual[K], Lambda[M => M], Root](prop, Root)
+      new Optional[K, PartitioningProps.SingleDynamicManual[K], Lambda[M => M], Root](prop, Root)
     }
 
+    /**
+      * Creates a dynamic multicast partition layer with manual materialization.
+      *
+      * Each input will be routed to a variable number of partitions which must be materialized manually.
+      *
+      * Input destined to non materialized partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partitions
+      * @param initialKeys the set of keys to materialized when the layer is initialized
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicManualMulticast[K](
         extractor: (In, Ctx, Set[K]) => Set[K],
         initialKeys: Set[K],
@@ -363,24 +601,46 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K, PartitioningProps.MultiDynamicManual[K], Lambda[M => M], Root] = {
       val prop =
-        PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
-      Multi[K, PartitioningProps.MultiDynamicManual[K], Lambda[M => M], Root](prop, Root)
+        new PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
+      new Multi[K, PartitioningProps.MultiDynamicManual[K], Lambda[M => M], Root](prop, Root)
     }
 
+    /**
+      * Creates a static unicast partition layer.
+      * 
+      * Each input will be routed to exactly one partition.
+      *
+      * In case an input is mapped to a non existing partition key the stream will fail.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param keys the partition keys to materialize. MUST contain all the possible outputs of `extractor`
+      * @return partition builder
+      */
     def static[K](
         extractor: (In, Ctx) => K,
         keys: Set[K]
       ): OneForOne[K, PartitioningProps.SingleStatic[K], Lambda[M => M], Root] = {
-      val prop = PartitioningProps.SingleStatic(extractor, keys)
-      OneForOne[K, PartitioningProps.SingleStatic[K], Lambda[M => M], Root](prop, Root)
+      val prop = new PartitioningProps.SingleStatic(extractor, keys)
+      new OneForOne[K, PartitioningProps.SingleStatic[K], Lambda[M => M], Root](prop, Root)
     }
 
+    /**
+      * Creates a static multicast partition layer.
+      * 
+      * Each input will be routed to a variable number of partitions.
+      *
+      * In case an input is mapped to a non existing partition key the stream will fail.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partition
+      * @param keys the partition keys to materialize. MUST contain all the possible outputs of `extractor`
+      * @return partition builder
+      */
     def staticMulticast[K](
         extractor: (In, Ctx, Set[K]) => Set[K],
         keys: Set[K]
       ): Multi[K, PartitioningProps.MultiStatic[K], Lambda[M => M], Root] = {
-      val prop = PartitioningProps.MultiStatic(extractor, keys)
-      Multi[K, PartitioningProps.MultiStatic[K], Lambda[M => M], Root](prop, Root)
+      val prop = new PartitioningProps.MultiStatic(extractor, keys)
+      new Multi[K, PartitioningProps.MultiStatic[K], Lambda[M => M], Root](prop, Root)
     }
   }
 
@@ -439,13 +699,19 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
-  case class OneForOne[
+  /**
+    * A one for one partition layer.
+    *
+    * Given one input the layer will produce exactly one output.
+    */
+  class OneForOne[
       K,
       Props <: PartitioningProps.OneForOne[K],
       ParentMV[_],
       Parent <: Layer[ParentMV]
-    ](props: Props,
-      parent: Parent
+    ] private[spekka](
+      private[spekka] val props: Props,
+      private[spekka] val parent: Parent
     )(implicit ev: Layer.CanBuildOneForOneT[ParentMV, Parent])
       extends Layer[Lambda[M => ParentMV[Props#MV[M]]]] {
     override private[PartitionTreeBuilder] type KS = K :: Parent#KS
@@ -469,30 +735,67 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       )
     }
 
+    /**
+      * Creates a dynamic unicast partition layer with automatic materialization.
+      * 
+      * Each input will be routed to exactly one partition which will be automatically
+      * materialized on the first element.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicAuto[K1](
         extractor: (In, Ctx) => K1,
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): OneForOne[K1, PartitioningProps.SingleDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
-      val prop = PartitioningProps.SingleDynamicAuto(extractor, completionCriteria, bufferSize)
-      OneForOne[K1, PartitioningProps.SingleDynamicAuto[K1], Lambda[
+      val prop = new PartitioningProps.SingleDynamicAuto(extractor, completionCriteria, bufferSize)
+      new OneForOne[K1, PartitioningProps.SingleDynamicAuto[K1], Lambda[
         M => ParentMV[Props#MV[M]]
       ], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a dynamic multicast partition layer with automatic materialization.
+      *
+      * Each input will be routed to a variable number of partitions which will be automatically
+      * materialized on the first element.
+      *
+      * Input mapped to an empty set of partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partitions
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicAutoMulticast[K1](
         extractor: (In, Ctx, Set[K1]) => Set[K1],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
-      val prop = PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
-      Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[
+      val prop = new PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
+      new Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[
         M => ParentMV[Props#MV[M]]
       ], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a dynamic unicast partition layer with manual materialization.
+      * 
+      * Each input will be routed to exactly one partition which must be materialized manually.
+      *
+      * Input destined to non materialized partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param initialKeys the set of keys to materialized when the layer is initialized
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicManual[K1](
         extractor: (In, Ctx) => K1,
         initialKeys: Set[K1],
@@ -501,17 +804,30 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Optional[K1, PartitioningProps.SingleDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
       val prop =
-        PartitioningProps.SingleDynamicManual(
+        new PartitioningProps.SingleDynamicManual(
           extractor,
           initialKeys,
           completionCriteria,
           bufferSize
         )
-      Optional[K1, PartitioningProps.SingleDynamicManual[K1], Lambda[
+      new Optional[K1, PartitioningProps.SingleDynamicManual[K1], Lambda[
         M => ParentMV[Props#MV[M]]
       ], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a dynamic multicast partition layer with manual materialization.
+      *
+      * Each input will be routed to a variable number of partitions which must be materialized manually.
+      *
+      * Input destined to non materialized partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partitions
+      * @param initialKeys the set of keys to materialized when the layer is initialized
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicManualMulticast[K1](
         extractor: (In, Ctx, Set[K1]) => Set[K1],
         initialKeys: Set[K1],
@@ -520,28 +836,50 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
       val prop =
-        PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
-      Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[
+        new PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
+      new Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[
         M => ParentMV[Props#MV[M]]
       ], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a static unicast partition layer.
+      * 
+      * Each input will be routed to exactly one partition.
+      *
+      * In case an input is mapped to a non existing partition key the stream will fail.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param keys the partition keys to materialize. MUST contain all the possible outputs of `extractor`
+      * @return partition builder
+      */
     def static[K1](
         extractor: (In, Ctx) => K1,
         keys: Set[K1]
       ): OneForOne[K1, PartitioningProps.SingleStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
-      val prop = PartitioningProps.SingleStatic(extractor, keys)
-      OneForOne[K1, PartitioningProps.SingleStatic[K1], Lambda[
+      val prop = new PartitioningProps.SingleStatic(extractor, keys)
+      new OneForOne[K1, PartitioningProps.SingleStatic[K1], Lambda[
         M => ParentMV[Props#MV[M]]
       ], OneForOne[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a static multicast partition layer.
+      * 
+      * Each input will be routed to a variable number of partitions.
+      *
+      * In case an input is mapped to a non existing partition key the stream will fail.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partition
+      * @param keys the partition keys to materialize. MUST contain all the possible outputs of `extractor`
+      * @return partition builder
+      */
     def staticMulticast[K1](
         extractor: (In, Ctx, Set[K1]) => Set[K1],
         keys: Set[K1]
       ): Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[K, Props, ParentMV, Parent]] = {
-      val prop = PartitioningProps.MultiStatic(extractor, keys)
-      Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[
+      val prop = new PartitioningProps.MultiStatic(extractor, keys)
+      new Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], OneForOne[
         K,
         Props,
         ParentMV,
@@ -593,13 +931,19 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
-  case class Optional[
+  /**
+    * An optional partition layer.
+    *
+    * Given one input the layer will produce either zero or one outputs.
+    */
+  class Optional[
       K,
       Props <: PartitioningProps.Optional[K],
       ParentMV[_],
       Parent <: Layer[ParentMV]
-    ](props: Props,
-      parent: Parent
+    ]private[spekka](
+      private[spekka] val props: Props,
+      private[spekka] val parent: Parent
     )(implicit ev: Layer.CanBuildOptionalT[ParentMV, Parent])
       extends Layer[Lambda[M => ParentMV[Props#MV[M]]]] {
     override private[PartitionTreeBuilder] type KS = K :: Parent#KS
@@ -622,6 +966,17 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       )
     }
 
+    /**
+      * Creates a dynamic unicast partition layer with automatic materialization.
+      * 
+      * Each input will be routed to exactly one partition which will be automatically
+      * materialized on the first element.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicAuto[K1](
         extractor: (In, Ctx) => K1,
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
@@ -629,26 +984,52 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Optional[K1, PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleDynamicAuto[K1]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
       val baseProp =
-        PartitioningProps.SingleDynamicAuto[K1](extractor, completionCriteria, bufferSize)
+        new PartitioningProps.SingleDynamicAuto[K1](extractor, completionCriteria, bufferSize)
       val prop =
-        PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleDynamicAuto[K1]](baseProp)
-      Optional[K1, PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleDynamicAuto[
+        new PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleDynamicAuto[K1]](baseProp)
+      new Optional[K1, PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleDynamicAuto[
         K1
       ]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a dynamic multicast partition layer with automatic materialization.
+      *
+      * Each input will be routed to a variable number of partitions which will be automatically
+      * materialized on the first element.
+      *
+      * Input mapped to an empty set of partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partitions
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicAutoMulticast[K1](
         extractor: (In, Ctx, Set[K1]) => Set[K1],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
-      val prop = PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
-      Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[
+      val prop = new PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
+      new Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[
         M => ParentMV[Props#MV[M]]
       ], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a dynamic unicast partition layer with manual materialization.
+      * 
+      * Each input will be routed to exactly one partition which must be materialized manually.
+      *
+      * Input destined to non materialized partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param initialKeys the set of keys to materialized when the layer is initialized
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicManual[K1](
         extractor: (In, Ctx) => K1,
         initialKeys: Set[K1],
@@ -657,17 +1038,30 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Optional[K1, PartitioningProps.SingleDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
       val prop =
-        PartitioningProps.SingleDynamicManual(
+        new PartitioningProps.SingleDynamicManual(
           extractor,
           initialKeys,
           completionCriteria,
           bufferSize
         )
-      Optional[K1, PartitioningProps.SingleDynamicManual[K1], Lambda[
+      new Optional[K1, PartitioningProps.SingleDynamicManual[K1], Lambda[
         M => ParentMV[Props#MV[M]]
       ], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a dynamic multicast partition layer with manual materialization.
+      *
+      * Each input will be routed to a variable number of partitions which must be materialized manually.
+      *
+      * Input destined to non materialized partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partitions
+      * @param initialKeys the set of keys to materialized when the layer is initialized
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicManualMulticast[K1](
         extractor: (In, Ctx, Set[K1]) => Set[K1],
         initialKeys: Set[K1],
@@ -676,20 +1070,31 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
       val prop =
-        PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
-      Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[
+        new PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
+      new Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[
         M => ParentMV[Props#MV[M]]
       ], Optional[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a static unicast partition layer.
+      * 
+      * Each input will be routed to exactly one partition.
+      *
+      * In case an input is mapped to a non existing partition key the stream will fail.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param keys the partition keys to materialize. MUST contain all the possible outputs of `extractor`
+      * @return partition builder
+      */
     def static[K1](
         extractor: (In, Ctx) => K1,
         keys: Set[K1]
       ): Optional[K1, PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleStatic[K1]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
-      val baseProp = PartitioningProps.SingleStatic(extractor, keys)
+      val baseProp = new PartitioningProps.SingleStatic(extractor, keys)
       val prop =
-        PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleStatic[K1]](baseProp)
-      Optional[
+        new PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleStatic[K1]](baseProp)
+      new Optional[
         K1,
         PartitioningProps.OneForOneAsOptional[K1, PartitioningProps.SingleStatic[K1]],
         Lambda[M => ParentMV[Props#MV[M]]],
@@ -697,12 +1102,23 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       ](prop, this)
     }
 
+    /**
+      * Creates a static multicast partition layer.
+      * 
+      * Each input will be routed to a variable number of partitions.
+      *
+      * In case an input is mapped to a non existing partition key the stream will fail.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partition
+      * @param keys the partition keys to materialize. MUST contain all the possible outputs of `extractor`
+      * @return partition builder
+      */
     def staticMulticast[K1](
         extractor: (In, Ctx, Set[K1]) => Set[K1],
         keys: Set[K1]
       ): Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
-      val prop = PartitioningProps.MultiStatic(extractor, keys)
-      Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[
+      val prop = new PartitioningProps.MultiStatic(extractor, keys)
+      new Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Optional[
         K,
         Props,
         ParentMV,
@@ -730,9 +1146,14 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       }
     }
 
-  case class Multi[K, Props <: PartitioningProps.Multi[K], ParentMV[_], Parent <: Layer[ParentMV]](
-      props: Props,
-      parent: Parent
+  /**
+    * A multi partition layer.
+    *
+    * Given one input the layer will produce either zero or n outputs.
+    */
+  class Multi[K, Props <: PartitioningProps.Multi[K], ParentMV[_], Parent <: Layer[ParentMV]] private[spekka](
+      private[spekka] val props: Props,
+      private[spekka] val parent: Parent
     )(implicit ev: Layer.CanBuildMultiT[ParentMV, Parent])
       extends Layer[Lambda[M => ParentMV[Props#MV[M]]]] {
     override private[PartitionTreeBuilder] type KS = K :: Parent#KS
@@ -752,6 +1173,17 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       )
     }
 
+    /**
+      * Creates a dynamic unicast partition layer with automatic materialization.
+      * 
+      * Each input will be routed to exactly one partition which will be automatically
+      * materialized on the first element.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicAuto[K1](
         extractor: (In, Ctx) => K1,
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
@@ -759,10 +1191,10 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleDynamicAuto[K1]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
       val baseProp =
-        PartitioningProps.SingleDynamicAuto[K1](extractor, completionCriteria, bufferSize)
+        new PartitioningProps.SingleDynamicAuto[K1](extractor, completionCriteria, bufferSize)
       val prop =
-        PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleDynamicAuto[K1]](baseProp)
-      Multi[
+        new PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleDynamicAuto[K1]](baseProp)
+      new Multi[
         K1,
         PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleDynamicAuto[K1]],
         Lambda[M => ParentMV[Props#MV[M]]],
@@ -770,14 +1202,27 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       ](prop, this)
     }
 
+    /**
+      * Creates a dynamic multicast partition layer with automatic materialization.
+      *
+      * Each input will be routed to a variable number of partitions which will be automatically
+      * materialized on the first element.
+      *
+      * Input mapped to an empty set of partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partitions
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicAutoMulticast[K1](
         extractor: (In, Ctx, Set[K1]) => Set[K1],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
-      val prop = PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
-      Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[
+      val prop = new PartitioningProps.MultiDynamicAuto(extractor, completionCriteria, bufferSize)
+      new Multi[K1, PartitioningProps.MultiDynamicAuto[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[
         K,
         Props,
         ParentMV,
@@ -785,6 +1230,19 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       ]](prop, this)
     }
 
+    /**
+      * Creates a dynamic unicast partition layer with manual materialization.
+      * 
+      * Each input will be routed to exactly one partition which must be materialized manually.
+      *
+      * Input destined to non materialized partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param initialKeys the set of keys to materialized when the layer is initialized
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicManual[K1](
         extractor: (In, Ctx) => K1,
         initialKeys: Set[K1],
@@ -793,15 +1251,15 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.OptionalAsMulti[K1, PartitioningProps.SingleDynamicManual[K1]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
       val baseProp =
-        PartitioningProps.SingleDynamicManual(
+        new PartitioningProps.SingleDynamicManual(
           extractor,
           initialKeys,
           completionCriteria,
           bufferSize
         )
       val prop =
-        PartitioningProps.OptionalAsMulti[K1, PartitioningProps.SingleDynamicManual[K1]](baseProp)
-      Multi[
+        new PartitioningProps.OptionalAsMulti[K1, PartitioningProps.SingleDynamicManual[K1]](baseProp)
+      new Multi[
         K1,
         PartitioningProps.OptionalAsMulti[K1, PartitioningProps.SingleDynamicManual[K1]],
         Lambda[M => ParentMV[Props#MV[M]]],
@@ -809,6 +1267,19 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       ](prop, this)
     }
 
+    /**
+      * Creates a dynamic multicast partition layer with manual materialization.
+      *
+      * Each input will be routed to a variable number of partitions which must be materialized manually.
+      *
+      * Input destined to non materialized partition keys are ignored, but their context is preserved.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partitions
+      * @param initialKeys the set of keys to materialized when the layer is initialized
+      * @param completionCriteria completion criteria for the materialized partition handlers
+      * @param bufferSize elements buffer of the partition layer
+      * @return partition builder
+      */
     def dynamicManualMulticast[K1](
         extractor: (In, Ctx, Set[K1]) => Set[K1],
         initialKeys: Set[K1],
@@ -817,8 +1288,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         bufferSize: Int = PartitionDynamic.defaultBufferSize
       ): Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
       val prop =
-        PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
-      Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[
+        new PartitioningProps.MultiDynamicManual(extractor, initialKeys, completionCriteria, bufferSize)
+      new Multi[K1, PartitioningProps.MultiDynamicManual[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[
         K,
         Props,
         ParentMV,
@@ -826,24 +1297,46 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       ]](prop, this)
     }
 
+    /**
+      * Creates a static unicast partition layer.
+      * 
+      * Each input will be routed to exactly one partition.
+      *
+      * In case an input is mapped to a non existing partition key the stream will fail.
+      *
+      * @param extractor partition key extractor function mapping each input to exactly one partition
+      * @param keys the partition keys to materialize. MUST contain all the possible outputs of `extractor`
+      * @return partition builder
+      */
     def static[K1](
         extractor: (In, Ctx) => K1,
         keys: Set[K1]
       ): Multi[K1, PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleStatic[K1]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
-      val baseProp = PartitioningProps.SingleStatic(extractor, keys)
+      val baseProp = new PartitioningProps.SingleStatic(extractor, keys)
       val prop =
-        PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleStatic[K1]](baseProp)
-      Multi[K1, PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleStatic[K1]], Lambda[
+        new PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleStatic[K1]](baseProp)
+      new Multi[K1, PartitioningProps.OneForOneAsMulti[K1, PartitioningProps.SingleStatic[K1]], Lambda[
         M => ParentMV[Props#MV[M]]
       ], Multi[K, Props, ParentMV, Parent]](prop, this)
     }
 
+    /**
+      * Creates a static multicast partition layer.
+      * 
+      * Each input will be routed to a variable number of partitions.
+      *
+      * In case an input is mapped to a non existing partition key the stream will fail.
+      *
+      * @param extractor partition key extractor function mapping each input to a set (potentially empty) of partition
+      * @param keys the partition keys to materialize. MUST contain all the possible outputs of `extractor`
+      * @return partition builder
+      */
     def staticMulticast[K1](
         extractor: (In, Ctx, Set[K1]) => Set[K1],
         keys: Set[K1]
       ): Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
-      val prop = PartitioningProps.MultiStatic(extractor, keys)
-      Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[
+      val prop = new PartitioningProps.MultiStatic(extractor, keys)
+      new Multi[K1, PartitioningProps.MultiStatic[K1], Lambda[M => ParentMV[Props#MV[M]]], Multi[
         K,
         Props,
         ParentMV,
