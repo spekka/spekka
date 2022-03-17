@@ -35,13 +35,31 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-class ShardedStatefulFlowRegistry(
+/**
+  * A [[ShardedStatefulFlowRegistry]] extends a `StatefulFlowRegistry` taking care of distributing the
+  * registered stateful flows on the cluster leveraging Akka Cluster Sharding.
+  *
+  * Flows registered on a [[ShardedStatefulFlowRegistry]] are also registered on the backing `StatefulFlowRegistry`,
+  * which still handles all the actual flow materialization, however they are wrapped in a sharding aware facade.
+  *
+  * A builder returned by a [[ShardedStatefulFlowRegistry]] is indistinguishable from one returned by a `StatefulFlowRegistry`.
+  *
+  * It is important that stateful flows using cluster sharding are register on every node of the cluster.
+  */
+class ShardedStatefulFlowRegistry private[spekka] (
     private[spekka] val registry: StatefulFlowRegistry,
     private[spekka] val sharding: ClusterSharding
   )(implicit scheduler: Scheduler,
     ec: ExecutionContext,
     timeout: Timeout) {
 
+  /**
+    * Register a stateful flow for the specified entity kind.
+    *
+    * @param entityKind The entity kind associated to the flow
+    * @param props The `StatefulFlowProps` of the flow
+    * @return a `StatefulFlowBuilder` instance
+    */
   def registerStatefulFlow[State, In, Out, Command](
       entityKind: String,
       props: StatefulFlowProps[In, Out, Command]
@@ -65,6 +83,14 @@ class ShardedStatefulFlowRegistry(
     )
   }
 
+  /**
+    * Register a stateful flow for the specified entity kind, blocking the thread until
+    * the registry completes the registration process.
+    *
+    * @param entityKind The entity kind associated to the flow
+    * @param props The `StatefulFlowProps` of the flow
+    * @return a `StatefulFlowBuilder` instance
+    */
   def registerStatefulFlowSync[State, In, Out, Command](
       entityKind: String,
       props: StatefulFlowProps[In, Out, Command]
@@ -216,6 +242,14 @@ object ShardedStatefulFlowRegistry {
       registry.makeControl(this, entityId)
   }
 
+  /**
+    * Creates a [[ShardedStatefulFlowRegistry]].
+    *
+    * @param registry The base `StatefulFlowRegistry`
+    * @param sharding The Akka Cluster Sharding extension
+    * @param timeout Timeout for interaction with the registry
+    * @return [[ShardedStatefulFlowRegistry]]
+    */
   def apply(
       registry: StatefulFlowRegistry,
       sharding: ClusterSharding,
