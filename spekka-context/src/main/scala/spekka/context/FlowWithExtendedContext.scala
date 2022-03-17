@@ -242,11 +242,6 @@ final class FlowWithExtendedContext[-In, +Out, Ctx, +M] private[spekka] (
     ): FlowWithExtendedContext[In, Out2, Ctx, M] =
     toFlowWithContext.mapAsync(parallelism)(f).asFlowWithExtendedContextUnsafe
 
-  // private[spekka] def mapContextUnsafe[Ctx2](
-  //     f: ExtendedContext[Ctx] => ExtendedContext[Ctx]
-  //   ): FlowWithExtendedContext[In, Out, Ctx, M] =
-  //   toFlowWithContext.mapContext(f).asFlowWithExtendedContextUnsafe
-
   /** Equivalent of `Flow.mapMaterializedValue`
     *
     * @param f

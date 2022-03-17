@@ -20,6 +20,11 @@ import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import akka.pattern.StatusReply
 
+/**
+  * An in memory implementation of [[StatefulFlowBackend]].
+  *
+  * Useful for testing logics without an actually persisted storage.
+  */
 object InMemoryStatefulFlowBackend {
   sealed private[spekka] trait InMemoryBackendProtocol
       extends StatefulFlowHandler.BackendProtocol[InMemoryBackendProtocol]
@@ -46,6 +51,9 @@ object InMemoryStatefulFlowBackend {
       }
     }
 
+  /**
+    * An in memory [[StatefulFlowBackend.EventBased]] implementation
+    */
   object EventBased {
     private[spekka] def behaviorFactory[State, Ev, In, Command](
         logic: StatefulFlowLogic.EventBased[State, Ev, In, Command],
@@ -109,6 +117,14 @@ object InMemoryStatefulFlowBackend {
       behavior(logic.initialState)
     }
 
+    /**
+      * Creates a new instance of [[InMemoryStatefulFlowBackend.EventBased]].
+      *
+      * @param sideEffectBufferSize Size of the buffer for stashing messages while performing side effects
+      * @return [[StatefulFlowBackend.EventBased]] instance
+      * @tparam State state type handled by this backend
+      * @tparam Ev events type handled by this backend
+      */
     def apply[State, Ev](
         sideEffectBufferSize: Int = 128
       ): StatefulFlowBackend.EventBased[State, Ev, InMemoryBackendProtocol] =
@@ -124,6 +140,9 @@ object InMemoryStatefulFlowBackend {
       }
   }
 
+  /**
+    * An in memory [[StatefulFlowBackend.DurableState]] implementation
+    */
   object DurableState {
     private[spekka] def behaviorFactory[State, In, Out, Command](
         logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
@@ -187,6 +206,13 @@ object InMemoryStatefulFlowBackend {
       behavior(logic.initialState)
     }
 
+    /**
+      * Creates a new instance of [[InMemoryStatefulFlowBackend.DurableState]].
+      *
+      * @param sideEffectBufferSize Size of the buffer for stashing messages while performing side effects
+      * @return [[StatefulFlowBackend.DurableState]] instance
+      * @tparam State state type handled by this backend
+      */
     def apply[State](
         sideEffectBufferSize: Int = 128
       ): StatefulFlowBackend.DurableState[State, InMemoryBackendProtocol] =

@@ -33,13 +33,43 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-class StatefulFlowRegistry(
+/**
+  * A [[StatefulFlowRegistry]] is responsible of handling the materialization of stateful flows.
+  *
+  * Each stateful flow manages a specific kind on entities. Once a flow has been registered for a particular 
+  * ''entityKind'', the resulting builder object can be used to instantiate flows for specific ''entities''.
+  *
+  * {{{
+  *   val registry = StatefulFlowRegistry(30.seconds)
+  *
+  *   val flowProps: StatefulFlowProps[In, Out, Command] = ???
+  *
+  *   val builder = registry.registerStatefulFlowSync("entity-kind", flowProps)
+  *   builder.flow("entity-id")
+  * }}}
+  *
+  * It is recommended to use a single registry for each application, however in case this were not possible
+  * (for instance because the registry needs to be created in a library or self-contained module) it is possible 
+  * to specify a name at construction time to differentiate multiple instances. If a registry with the same name
+  * already exists an exception will be thrown.
+  *
+  * Note that when using multiple registries it is the responsibility of the programmer to make sure that
+  * stateful flows registered on different instances do not uses the same storage with the same entity kind.
+  */
+class StatefulFlowRegistry private[spekka] (
     private val registryRef: ActorRef[StatefulFlowRegistry.ExposedProtocol]
   )(implicit scheduler: Scheduler,
     ec: ExecutionContext,
     timeout: Timeout) {
   import akka.actor.typed.scaladsl.AskPattern._
 
+  /**
+    * Register a stateful flow for the specified entity kind.
+    *
+    * @param entityKind The entity kind associated to the flow
+    * @param props The [[StatefulFlowProps]] of the flow
+    * @return a [[StatefulFlowBuilder]] instance
+    */
   def registerStatefulFlow[State, In, Out, Command](
       entityKind: String,
       props: StatefulFlowProps[In, Out, Command]
@@ -50,6 +80,14 @@ class StatefulFlowRegistry(
       )
       .map(_ => new StatefulFlowRegistry.StatefulFlowBuilderImpl(this, entityKind))
 
+  /**
+    * Register a stateful flow for the specified entity kind, blocking the thread until
+    * the registry completes the registration process.
+    *
+    * @param entityKind The entity kind associated to the flow
+    * @param props The [[StatefulFlowProps]] of the flow
+    * @return a [[StatefulFlowBuilder]] instance
+    */
   def registerStatefulFlowSync[State, In, Out, Command](
       entityKind: String,
       props: StatefulFlowProps[In, Out, Command]
@@ -152,8 +190,8 @@ class StatefulFlowRegistry(
 }
 
 object StatefulFlowRegistry {
-  sealed trait Protocol
-  sealed trait ExposedProtocol extends Protocol
+  private[spekka] sealed trait Protocol
+  private[spekka] sealed trait ExposedProtocol extends Protocol
 
   final private[spekka] class StatefulFlowControlImpl[Command](
       registry: StatefulFlowRegistry,
@@ -179,7 +217,7 @@ object StatefulFlowRegistry {
       } yield Done
   }
 
-  final class StatefulFlowBuilderImpl[In, Out, Command](
+  private[spekka] final class StatefulFlowBuilderImpl[In, Out, Command](
       private[spekka] val registry: StatefulFlowRegistry,
       val entityKind: String)
       extends StatefulFlowBuilder[In, Out, Command] {
@@ -213,7 +251,7 @@ object StatefulFlowRegistry {
       registry.makeControl(this, entityId)
   }
 
-  object Protocol {
+  private[spekka] object Protocol {
     case class RegisterStatefulFlowHandler[In, Out, Command, Result](
         entityKind: String,
         flowSpec: StatefulFlowProps[In, Out, Command],
@@ -341,9 +379,16 @@ object StatefulFlowRegistry {
       }
     }
 
+  /**
+    * Creates a [[StatefulFlowRegistry]].
+    *
+    * @param queryTimeout Timeout for interactions with the registry
+    * @param name Name of the registry
+    * @return [[StatefulFlowRegistry]] instance
+    */
   def apply(
       queryTimeout: Timeout,
-      name: String = ""
+      name: String = "default"
     )(implicit system: ActorSystem[_]
     ): StatefulFlowRegistry = {
     val ref = system
