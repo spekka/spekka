@@ -35,9 +35,21 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
+/**
+  * An Akka Persistence based implementation of `StatefulFlowBackend`
+  */
 object AkkaPersistenceStatefulFlowBackend {
 
+  /**
+    * Container of serialized data for `spekka.codec.Codec` based serialization
+    *
+    * @param bytes serialized bytes
+    */
   class SerializedData(val bytes: Array[Byte])
+
+  /**
+    * Akka serializer for [[SerializedData]]
+    */
   class SerializedDataSerializer extends SerializerWithStringManifest {
     override def identifier: Int = Int.MaxValue
     override def manifest(o: AnyRef): String = ""
@@ -55,7 +67,7 @@ object AkkaPersistenceStatefulFlowBackend {
       new SerializedData(bytes)
   }
 
-  class StateWrapper[State] private[StateWrapper] (
+  private[AkkaPersistenceStatefulFlowBackend] class StateWrapper[State] private[StateWrapper] (
       var waitForRecoverCompletion: Boolean,
       var waitingForProcessingCompletion: Boolean,
       val innerState: State) {
@@ -63,10 +75,15 @@ object AkkaPersistenceStatefulFlowBackend {
       new StateWrapper(waitForRecoverCompletion, waitingForProcessingCompletion, s)
   }
 
-  object StateWrapper {
+  private[AkkaPersistenceStatefulFlowBackend] object StateWrapper {
     def recoveredState[State](s: State): StateWrapper[State] = new StateWrapper(true, false, s)
   }
 
+  /**
+    * Snapshot adapter for `spekka.codec.Codec` based serialization
+    *
+    * @param codec the codec to be used to serialize/deserialize the data
+    */
   class SerializedDataSnapshotAdapter[T](codec: Codec[T]) extends SnapshotAdapter[T] {
     override def toJournal(state: T): Any = new SerializedData(codec.encoder.encode(state))
     override def fromJournal(from: Any): T =
@@ -98,6 +115,14 @@ object AkkaPersistenceStatefulFlowBackend {
     }
   }
 
+  /**
+    * An implementation of `StatefulFlowBackend.EventBased` based on Akka Persistence Event Sourcing.
+    *
+    * Events are stored in the journal and tagged with the following tag: `$$entityKind-$$partitionId`.
+    * Partition ids are computed as follows: `Math.abs(entityId.hashCode % eventPartitions)`.
+    *
+    * For further details on event tagging see the documentation of Akka Projections.
+    */
   object EventBased {
     import akka.persistence.typed.scaladsl.Effect
     import akka.persistence.typed.scaladsl.EffectBuilder
@@ -122,26 +147,53 @@ object AkkaPersistenceStatefulFlowBackend {
     private[spekka] case class SideEffectFailure(ex: Throwable, failureAction: (Throwable) => Unit)
         extends AkkaPersistenceBackendProtocol
 
+    /**
+      * Akka persistence plugins configuration
+      */
     trait PersistencePlugin {
+      /**
+        * Journal plugin
+        */
       def journalPluginId: String
+
+      /**
+        * Snapshot plugin
+        */
       def snapshotPluginId: String
     }
 
     object PersistencePlugin {
+      /**
+        * [[PersistencePlugin]] using Akka Persistence Cassandra
+        */
       case object CassandraStoragePlugin extends PersistencePlugin {
         override val journalPluginId: String = "akka.persistence.cassandra.journal"
         override val snapshotPluginId: String = "akka.persistence.cassandra.snapshot"
       }
 
+      /**
+        * [[PersistencePlugin]] using Akka Persistence JDBC
+        */
       case object JdbcStoragePlugin extends PersistencePlugin {
         override val journalPluginId: String = "jdbc-journal"
         override val snapshotPluginId: String = "jdbc-snapshot-store"
       }
 
+      /**
+        * [[PersistencePlugin]] allowing use of custom journal/snapshot Akka Persistence plugins
+        *
+        * @param journalPluginId the id of the journal plugin
+        * @param snapshotPluginId the id of the snapshot plugin
+        */
       case class CustomStoragePlugin(journalPluginId: String, snapshotPluginId: String)
           extends PersistencePlugin
     }
 
+    /**
+    * Event adapter for `spekka.codec.Codec` based serialization
+    *
+    * @param codec the codec to be used to serialize/deserialize the data
+    */
     class SerializedDataEventAdapter[T](codec: Codec[T]) extends EventAdapter[T, SerializedData] {
       override def manifest(event: T): String = ""
       override def toJournal(e: T): SerializedData = new SerializedData(codec.encoder.encode(e))
@@ -351,6 +403,17 @@ object AkkaPersistenceStatefulFlowBackend {
       }
     }
 
+    /**
+      * Creates a new instance of [[AkkaPersistenceStatefulFlowBackend.EventBased]].
+      *
+      * @param storagePlugin the persistence plugin to use
+      * @param retentionCriteria the retention criteria configuration
+      * @param eventsPartitions the number of partitions to tag the events into (see Akka Projections)
+      * @param sideEffectsParallelism the number of side effects to execute concurrently
+      * @return [[EventBased]] instance
+      * @tparam State state type handled by this backend
+      * @tparam Ev events type handled by this backend
+      */
     def apply[State, Ev](
         storagePlugin: EventBased.PersistencePlugin,
         retentionCriteria: RetentionCriteria = RetentionCriteria.disabled,
@@ -367,6 +430,9 @@ object AkkaPersistenceStatefulFlowBackend {
       )
   }
 
+  /**
+    * An `StatefulFlowBackend.EventBased` implementation based on Akka Persistence Event Sourcing.
+    */
   class EventBased[State, Ev] private[spekka] (
       storagePlugin: EventBased.PersistencePlugin,
       retentionCriteria: RetentionCriteria,
@@ -394,6 +460,14 @@ object AkkaPersistenceStatefulFlowBackend {
         snapshotAdapter
       )
 
+    /**
+      * Changes the number of partitions to be used for event tagging.
+      *
+      * Events are tagged with the following tag: `$$entityKind-$$partitionId`.
+      * Partition ids are computed as follows: `Math.abs(entityId.hashCode % eventPartitions)`.
+      * @param n the new value of event partitions
+      * @return A new instance of [[EventBased]] with the specified event partitions
+      */
     def withEventsPartitions(n: Int): EventBased[State, Ev] =
       new EventBased(
         storagePlugin,
@@ -404,6 +478,12 @@ object AkkaPersistenceStatefulFlowBackend {
         snapshotAdapter
       )
 
+    /**
+      * Changes the side effect parallelism.
+      *
+      * @param n the new side effects parallelism
+      * @return A new instance of [[EventBased]] with the specified side effect parallelism
+      */
     def withSideEffectsParallelism(n: Int): EventBased[State, Ev] =
       new EventBased(
         storagePlugin,
@@ -414,6 +494,15 @@ object AkkaPersistenceStatefulFlowBackend {
         snapshotAdapter
       )
 
+    /**
+      * Allows the configuration of a custom event adapter.
+      *
+      * When using custom event adapters it is the responsibility of the programmer to correctly
+      * configure Akka Serialization infrastructure.
+      *
+      * @param eventAdapter the event adapter to use
+      * @return A new instance of [[EventBased]] with the specified event adapter
+      */
     def withEventAdapter(
         eventAdapter: EventAdapter[Ev, _]
       ): EventBased[State, Ev] =
@@ -426,6 +515,15 @@ object AkkaPersistenceStatefulFlowBackend {
         snapshotAdapter
       )
 
+    /**
+      * Allows the configuration of a custom snapshot adapter.
+      *
+      * When using custom snapshot adapters it is the responsibility of the programmer to correctly
+      * configure Akka Serialization infrastructure.
+      *
+      * @param snapshotAdapter the snapshot adapter to use
+      * @return A new instance of [[EventBased]] with the specified snapshot adapter
+      */
     def withSnapshotAdapter(
         snapshotAdapter: SnapshotAdapter[State]
       ): EventBased[State, Ev] =
@@ -438,6 +536,14 @@ object AkkaPersistenceStatefulFlowBackend {
         Some(snapshotAdapter)
       )
 
+    /**
+      * Configures an explicit event codec to be used during serialization.
+      *
+      * When using explicit codecs there is no need to configure Akka Serialization infrastructure.
+      *
+      * @param eventCodec the event codec to use
+      * @return A new instance of [[EventBased]] with the specified event codec
+      */
     def withEventCodec(
         implicit eventCodec: Codec[Ev]
       ): EventBased[State, Ev] =
@@ -450,6 +556,14 @@ object AkkaPersistenceStatefulFlowBackend {
         snapshotAdapter
       )
 
+    /**
+      * Configures an explicit snapshot codec to be used during serialization.
+      *
+      * When using explicit codecs there is no need to configure Akka Serialization infrastructure.
+      *
+      * @param snapshotCodec the snapshot codec to use
+      * @return A new instance of [[EventBased]] with the specified snapshot codec
+      */
     def withSnapshotCodec(
         implicit snapshotCodec: Codec[State]
       ): EventBased[State, Ev] =
@@ -463,6 +577,9 @@ object AkkaPersistenceStatefulFlowBackend {
       )
   }
 
+  /**
+    * An implementation of `StatefulFlowBackend.DurableState` based on Akka Persistence Durable State.
+    */
   object DurableState {
     import akka.persistence.typed.state.scaladsl.Effect
     import akka.persistence.typed.state.scaladsl.EffectBuilder
@@ -485,15 +602,29 @@ object AkkaPersistenceStatefulFlowBackend {
     private[spekka] case class SideEffectFailure(ex: Throwable, failureAction: (Throwable) => Unit)
         extends AkkaPersistenceBackendProtocol
 
+    /**
+      * Akka persistence plugin configuration
+      */
     trait PersistencePlugin {
+      /**
+        * The state store plugin
+        */
       def statePluginId: String
     }
 
     object PersistencePlugin {
+      /**
+        * [[PersistencePlugin]] using Akka Persistence JDBC
+        */
       case object JdbcStoragePlugin extends PersistencePlugin {
         override val statePluginId: String = "jdbc-durable-state-store"
       }
 
+      /**
+        * [[PersistencePlugin]] allowing use of custom state Akka Persistence plugin
+        *
+        * @param statePluginId the id of the state plugin
+        */
       case class CustomStoragePlugin(statePluginId: String) extends PersistencePlugin
     }
 
@@ -681,17 +812,29 @@ object AkkaPersistenceStatefulFlowBackend {
       }
     }
 
+    /**
+      * Creates a new instance of [[AkkaPersistenceStatefulFlowBackend.DurableState]].
+      *
+      * @param storagePlugin the persistence plugin to use
+      * @param sideEffectsParallelism the number of side effects to execute concurrently
+      * @return [[DurableState]] instance
+      * @tparam State state type handled by this backend
+      */
     def apply[State](
-        storagePlugin: DurableState.PersistencePlugin
+        storagePlugin: DurableState.PersistencePlugin,
+        sideEffectsParallelism: Int = 1
       ): DurableState[State] =
       new DurableState(
         storagePlugin,
-        1,
+        sideEffectsParallelism,
         None
       )
   }
 
-  class DurableState[State](
+  /**
+    * An `StatefulFlowBackend.DurableState` implementation based on Akka Persistence Durable State.
+    */
+  class DurableState[State] private[spekka] (
       storagePlugin: DurableState.PersistencePlugin,
       sideEffectsParallelism: Int,
       snapshotAdapter: Option[SnapshotAdapter[State]])
@@ -712,6 +855,12 @@ object AkkaPersistenceStatefulFlowBackend {
         snapshotAdapter
       )
 
+    /**
+      * Changes the side effect parallelism.
+      *
+      * @param n the new side effects parallelism
+      * @return A new instance of [[DurableState]] with the specified side effect parallelism
+      */
     def withSideEffectsParallelism(n: Int): DurableState[State] =
       new DurableState(
         storagePlugin,
@@ -719,6 +868,15 @@ object AkkaPersistenceStatefulFlowBackend {
         snapshotAdapter
       )
 
+    /**
+      * Allows the configuration of a custom snapshot adapter.
+      *
+      * When using custom snapshot adapters it is the responsibility of the programmer to correctly
+      * configure Akka Serialization infrastructure.
+      *
+      * @param snapshotAdapter the snapshot adapter to use
+      * @return A new instance of [[DurableState]] with the specified snapshot adapter
+      */
     def withSnapshotAdapter(
         snapshotAdapter: SnapshotAdapter[State]
       ): DurableState[State] =
@@ -728,6 +886,14 @@ object AkkaPersistenceStatefulFlowBackend {
         Some(snapshotAdapter)
       )
 
+    /**
+      * Configures an explicit snapshot codec to be used during serialization.
+      *
+      * When using explicit codecs there is no need to configure Akka Serialization infrastructure.
+      *
+      * @param snapshotCodec the snapshot codec to use
+      * @return A new instance of [[DurableState]] with the specified snapshot codec
+      */
     def withSnapshotCodec(
         implicit snapshotCodec: Codec[State]
       ): DurableState[State] =
