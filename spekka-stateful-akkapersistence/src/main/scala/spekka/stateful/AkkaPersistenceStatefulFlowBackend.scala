@@ -443,7 +443,7 @@ object AkkaPersistenceStatefulFlowBackend {
       extends StatefulFlowBackend.EventBased[State, Ev, EventBased.AkkaPersistenceBackendProtocol] {
     override val id: String = "akka-persistence-event-based"
 
-    override def behaviorFor[In, Command](
+    override private[spekka] def behaviorFor[In, Command](
         logic: StatefulFlowLogic.EventBased[State, Ev, In, Command],
         entityKind: String,
         entityId: String
@@ -841,7 +841,7 @@ object AkkaPersistenceStatefulFlowBackend {
       extends StatefulFlowBackend.DurableState[State, DurableState.AkkaPersistenceBackendProtocol] {
     override val id: String = "akka-persistence-durable-state"
 
-    override def behaviorFor[In, Out, Command](
+    override private[spekka] def behaviorFor[In, Out, Command](
         logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
         entityKind: String,
         entityId: String

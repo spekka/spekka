@@ -131,7 +131,7 @@ object InMemoryStatefulFlowBackend {
       new StatefulFlowBackend.EventBased[State, Ev, InMemoryBackendProtocol] {
         override val id: String = "in-memory-event-based"
 
-        override def behaviorFor[In, Command](
+        override private[spekka] def behaviorFor[In, Command](
             logic: StatefulFlowLogic.EventBased[State, Ev, In, Command],
             entityKind: String,
             entityId: String
@@ -219,7 +219,7 @@ object InMemoryStatefulFlowBackend {
       new StatefulFlowBackend.DurableState[State, InMemoryBackendProtocol] {
         override val id: String = "in-memory-durable-state"
 
-        override def behaviorFor[In, Out, Command](
+        override private[spekka] def behaviorFor[In, Out, Command](
             logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
             entityKind: String,
             entityId: String
