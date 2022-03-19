@@ -42,8 +42,20 @@ lazy val commonSettings = Seq(
 lazy val `spekka-docs` = project
   .enablePlugins(ParadoxPlugin)
   .enablePlugins(GitHubPagesPlugin)
+  .enablePlugins(ParadoxMaterialThemePlugin)
   .settings(
-    paradoxTheme := Some(builtinParadoxTheme("generic")),
+    Compile / paradoxMaterialTheme ~= {
+      _.withRepository(uri("https://github.com/spekka/spekka"))
+      .withCopyright("Copyright © Andrea Zito")
+      .withLogoIcon("stream")
+      .withSocial(
+        uri("https://github.com/nivox"),
+        uri("https://twitter.com/nivox"),
+        uri("https://linkedin.com/in/andreazito")
+      )
+      .withoutSearch()
+    },
+    //paradoxTheme := Some(builtinParadoxTheme("generic")),
     gitHubPagesOrgName := "spekka",
     gitHubPagesRepoName := "spekka.github.io",
     gitHubPagesSiteDir := target.value / "paradox" / "site" / "main",
