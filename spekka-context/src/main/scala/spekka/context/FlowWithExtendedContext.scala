@@ -26,19 +26,21 @@ import akka.stream.scaladsl.Keep
 import spekka.context.internal._
 
 import scala.collection.immutable
+import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 
-/**
-* Provides the implicit conversions needed to make [[FlowWithExtendedContext]] interoperatee
-* with standard akka flows.
-*/
+/** Provides the implicit conversions needed to make [[FlowWithExtendedContext]] interoperatee with
+  * standard akka flows.
+  */
 trait FlowWithExtendedContextSyntax {
 
-  /**
-  * Converts the provided [[FlowWithExtendedContext]] into a tupled flow working on the base context.
-  * @param flow the [[FlowWithExtendedContext]] to convert
-  * @return a tupled flow taking/emitting the base context of the [[FlowWithExtendedContext]]
-  */
+  /** Converts the provided [[FlowWithExtendedContext]] into a tupled flow working on the base
+    * context.
+    * @param flow
+    *   the [[FlowWithExtendedContext]] to convert
+    * @return
+    *   a tupled flow taking/emitting the base context of the [[FlowWithExtendedContext]]
+    */
   implicit def toWrappingGraph[In, Out, Ctx, M](
       flow: FlowWithExtendedContext[In, Out, Ctx, M]
     ): Graph[FlowShape[(In, Ctx), (Out, Ctx)], M] = {
@@ -48,20 +50,21 @@ trait FlowWithExtendedContextSyntax {
       .map { case (out, ectx) => out -> ectx.innerContext }
   }
 
-  /**
-  * Converts the provided [[FlowWithExtendedContext]] into a tupled flow wotking on the [[ExtendedContext]].
-  * @param flow the [[FlowWithExtendedContext]] to convert
-  * @return a tupled flow taking/emitting the Extended context of the [[FlowWithExtendedContext]]
-  */
+  /** Converts the provided [[FlowWithExtendedContext]] into a tupled flow wotking on the
+    * [[ExtendedContext]].
+    * @param flow
+    *   the [[FlowWithExtendedContext]] to convert
+    * @return
+    *   a tupled flow taking/emitting the Extended context of the [[FlowWithExtendedContext]]
+    */
   implicit def toGraph[In, Out, Ctx, M](
       flow: FlowWithExtendedContext[In, Out, Ctx, M]
     ): Graph[FlowShape[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx])], M] = {
     flow.toGraph
   }
 
-  /**
-  * Ops class for tupled flows using [[ExtendedContext]].
-  */
+  /** Ops class for tupled flows using [[ExtendedContext]].
+    */
   implicit class GraphConversionOps[In, Out, Ctx, M](
       graph: Graph[FlowShape[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx])], M]) {
 
@@ -77,9 +80,8 @@ trait FlowWithExtendedContextSyntax {
       new FlowWithExtendedContext(graph)
   }
 
-  /**
-  * Ops class for [[FlowWithExtendedContext]] with iterable outputs
-  */
+  /** Ops class for [[FlowWithExtendedContext]] with iterable outputs
+    */
   implicit class FlowWithExtendedContextListOps[In, OutE, Out <: immutable.Iterable[OutE], Ctx, M](
       backingFlow: FlowWithExtendedContext[In, Out, Ctx, M]) {
 
@@ -120,21 +122,21 @@ object FlowWithExtendedContext extends FlowWithExtendedContextSyntax {
       graph: Graph[FlowShape[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx])], M]
     ): FlowWithExtendedContext[In, Out, Ctx, M] = new FlowWithExtendedContext(graph)
 
-  /**
-  * Object containing the implicit conversions needed to work with [[FlowWithExtendedContext]].
-  *
-  * Most of the implicit needed for working with [[FlowWithExtendedContext]] are automatically discovered,
-  * however there are some situation where the compiler cannot find the required implicit itself.
-  *
-  * In these situation you need to manually import this object as follows:
-  *
-  * ```
-  * import FlowWithExtendedContext.sytanx._
-  * ```
-  *
-  * This is usually only required to access the extension method `asFlowWithExtendedContextUnsafe` on
-  * tupled flows of type `Flow[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx]), _]`.
-  */
+  /** Object containing the implicit conversions needed to work with [[FlowWithExtendedContext]].
+    *
+    * Most of the implicit needed for working with [[FlowWithExtendedContext]] are automatically
+    * discovered, however there are some situation where the compiler cannot find the required
+    * implicit itself.
+    *
+    * In these situation you need to manually import this object as follows:
+    *
+    * ```
+    * import FlowWithExtendedContext.sytanx._
+    * ```
+    *
+    * This is usually only required to access the extension method `asFlowWithExtendedContextUnsafe`
+    * on tupled flows of type `Flow[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx]), _]`.
+    */
   object syntax extends FlowWithExtendedContextSyntax
 }
 
@@ -230,6 +232,51 @@ final class FlowWithExtendedContext[-In, +Out, Ctx, +M] private[spekka] (
   def map[Out2](f: Out => Out2): FlowWithExtendedContext[In, Out2, Ctx, M] =
     toFlowWithContext.map(f).asFlowWithExtendedContextUnsafe
 
+  /** Variant of `map` with read-only access to the context value
+    *
+    * @param f
+    *   the function to apply to each element
+    */
+  def mapWithContext[Out2](f: (Out, Ctx) => Out2): FlowWithExtendedContext[In, Out2, Ctx, M] =
+    toFlow.map { case (e, ctx) => f(e, ctx.innerContext) -> ctx }.asFlowWithExtendedContextUnsafe
+
+  /** Allows to perform stateful transformation to the stream without affecting its cardinality.
+    *
+    * The semantics of the transformation function is the same as for `Flow.statefulMapConcat`,
+    * however the produced outputs will not be concatenated.
+    * @param f
+    *   the stateful transformation function
+    * @return
+    *   transformed flow
+    */
+  def statefulMap[Out2](f: () => Out => Out2): FlowWithExtendedContext[In, Out2, Ctx, M] = {
+    def wrappedF() = {
+      val inst = f()
+
+      in: (Out, ExtendedContext[Ctx]) => Some(inst(in._1) -> in._2)
+    }
+
+    toFlow.statefulMapConcat(wrappedF).asFlowWithExtendedContextUnsafe
+  }
+
+  /** Variant of `statefulMap` with read-only access to the context value
+    * @param f
+    *   the stateful transformation function
+    * @return
+    *   transformed flow
+    */
+  def statefulMapWithContext[Out2](
+      f: () => (Out, Ctx) => Out2
+    ): FlowWithExtendedContext[In, Out2, Ctx, M] = {
+    def wrappedF() = {
+      val inst = f()
+
+      in: (Out, ExtendedContext[Ctx]) => Some(inst(in._1, in._2.innerContext) -> in._2)
+    }
+
+    toFlow.statefulMapConcat(wrappedF).asFlowWithExtendedContextUnsafe
+  }
+
   /** Equivalent of `Flow.mapAsync`
     * @param parallelism
     *   the number of elements to process in parallel
@@ -241,6 +288,21 @@ final class FlowWithExtendedContext[-In, +Out, Ctx, +M] private[spekka] (
     )(f: Out => Future[Out2]
     ): FlowWithExtendedContext[In, Out2, Ctx, M] =
     toFlowWithContext.mapAsync(parallelism)(f).asFlowWithExtendedContextUnsafe
+
+  /** Variant of `mapAsync` with read-only access to the context value
+    * @param parallelism
+    *   the number of elements to process in parallel
+    * @param f
+    *   the function to apply to each element
+    */
+  def mapAsyncWithContext[Out2](
+      parallelism: Int
+    )(f: (Out, Ctx) => Future[Out2]
+    )(implicit ec: ExecutionContext
+    ): FlowWithExtendedContext[In, Out2, Ctx, M] =
+    toFlow
+      .mapAsync(parallelism) { case (e, ctx) => f(e, ctx.innerContext).map(_ -> ctx) }
+      .asFlowWithExtendedContextUnsafe
 
   /** Equivalent of `Flow.mapMaterializedValue`
     *

@@ -91,9 +91,9 @@ class ShardedStatefulFlowSuite
   }
 
   val inputs = 1.to(10).map(i => TestInput(i.toLong, 1)) :+ TestInput(0L, 1)
-  val registry = StatefulFlowRegistry(30.seconds)
+  val registry = StatefulFlowRegistry(30.seconds)(typedSystem)
   val shardedRegistry =
-    ShardedStatefulFlowRegistry(registry, ClusterSharding(typedSystem), 30.seconds)
+    ShardedStatefulFlowRegistry(registry, ClusterSharding(typedSystem), 30.seconds)(typedSystem)
 
   test("simple flow works with sharding") {
     val flowProps = StatefulFlowLogic

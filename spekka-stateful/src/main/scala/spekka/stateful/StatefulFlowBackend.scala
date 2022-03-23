@@ -25,11 +25,12 @@ import scala.concurrent.Future
 import scala.util.Failure
 import scala.util.Success
 
-/**
-  * A [[StatefulFlowBackend]] is responsible of managing the persistence of the state of a stateful flow.
+/** A [[StatefulFlowBackend]] is responsible of managing the persistence of the state of a stateful
+  * flow.
   *
-  * It is not concerned to how/when the state is changed (which is controlled by the [[StatefulFlowLogic]]),
-  * but is the ultimate component in charge of making sure that the state is actually persisted and recovered.
+  * It is not concerned to how/when the state is changed (which is controlled by the
+  * [[StatefulFlowLogic]]), but is the ultimate component in charge of making sure that the state is
+  * actually persisted and recovered.
   *
   * The currently supported stateful flow backends are:
   *
@@ -37,30 +38,32 @@ import scala.util.Success
   *   - [[StatefulFlowBackend.DurableState]]
   */
 sealed trait StatefulFlowBackend {
-  /**
-    * Unique identifier of the backend implementation
+
+  /** Unique identifier of the backend implementation
     */
   val id: String
 }
 
-/**
-  * Namespace object for stateful flow backends
+/** Namespace object for stateful flow backends
   */
 object StatefulFlowBackend {
 
-  /**
-    * A [[StatefulFlowBackend]] for [[StatefulFlowLogic.EventBased]] logics.
+  /** A [[StatefulFlowBackend]] for [[StatefulFlowLogic.EventBased]] logics.
     *
-    * The state is defined by the series of event that generated it. The backend is responsible of persisting the
-    * individual events and recompute the state by re-applying the persisted events starting from the initial empty state.
+    * The state is defined by the series of event that generated it. The backend is responsible of
+    * persisting the individual events and recompute the state by re-applying the persisted events
+    * starting from the initial empty state.
     *
-    * @tparam State the type of state managed by the backend
-    * @tparam Ev the type of event managed by the backend
-    * @tparam BackendProtocol the internal protocol of the backend
+    * @tparam State
+    *   the type of state managed by the backend
+    * @tparam Ev
+    *   the type of event managed by the backend
+    * @tparam BackendProtocol
+    *   the internal protocol of the backend
     */
   trait EventBased[State, Ev, BackendProtocol] extends StatefulFlowBackend {
-    /**
-      * The logic type compatible with this backend
+
+    /** The logic type compatible with this backend
       */
     type Logic[In, Command] = StatefulFlowLogic.EventBased[State, Ev, In, Command]
 
@@ -70,11 +73,13 @@ object StatefulFlowBackend {
         entityId: String
       ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, BackendProtocol]]
 
-    /**
-      * Creates a [[StatefulFlowProps]] for this backend with the specified logic.
+    /** Creates a [[StatefulFlowProps]] for this backend with the specified logic.
       *
-      * @param logic An [[StatefulFlowLogic.EventBased]] logic to use together with this backend to create a stateful flow
-      * @return [[StatefulFlowProps]] for this backend and the specified logic
+      * @param logic
+      *   An [[StatefulFlowLogic.EventBased]] logic to use together with this backend to create a
+      *   stateful flow
+      * @return
+      *   [[StatefulFlowProps]] for this backend and the specified logic
       */
     def propsForLogic[In, Command](
         logic: Logic[In, Command]
@@ -82,15 +87,16 @@ object StatefulFlowBackend {
       new StatefulFlowProps.EventBased[State, Ev, In, Command, BackendProtocol](logic, this)
   }
 
-  /**
-    * A [[StatefulFlowBackend]] for [[StatefulFlowLogic.DurableState]] logics.
+  /** A [[StatefulFlowBackend]] for [[StatefulFlowLogic.DurableState]] logics.
     *
-    * @tparam State the type of state managed by the backend
-    * @tparam BackendProtocol the internal protocol of the backend
+    * @tparam State
+    *   the type of state managed by the backend
+    * @tparam BackendProtocol
+    *   the internal protocol of the backend
     */
   trait DurableState[State, BackendProtocol] extends StatefulFlowBackend {
-    /**
-      * The logic type compatible with this backend
+
+    /** The logic type compatible with this backend
       */
     type Logic[In, Out, Command] = StatefulFlowLogic.DurableState[State, In, Out, Command]
 
@@ -100,11 +106,13 @@ object StatefulFlowBackend {
         entityId: String
       ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, BackendProtocol]]
 
-    /**
-      * Creates a [[StatefulFlowProps]] for this backend with the specified logic.
+    /** Creates a [[StatefulFlowProps]] for this backend with the specified logic.
       *
-      * @param logic An [[StatefulFlowLogic.EventBased]] logic to use together with this backend to create a stateful flow
-      * @return [[StatefulFlowProps]] for this backend and the specified logic
+      * @param logic
+      *   An [[StatefulFlowLogic.EventBased]] logic to use together with this backend to create a
+      *   stateful flow
+      * @return
+      *   [[StatefulFlowProps]] for this backend and the specified logic
       */
     def propsForLogic[In, Out, Command](
         logic: Logic[In, Out, Command]

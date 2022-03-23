@@ -15,11 +15,18 @@
  */
 
 package spekka.stateful
-import akka.actor.typed.ActorSystem
+
 import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import akka.testkit.TestProbe
+import spekka.stateful.DurableStateTestLogic
+import spekka.stateful.EventBasedTestLogic
+import spekka.stateful.InMemoryStatefulFlowBackend
+import spekka.stateful.IncreaseCounterWithTimestamp
+import spekka.stateful.StatefulFlowRegistry
+import spekka.stateful.TestInput
+import spekka.stateful.TestState
 import spekka.test.SpekkaSuite
 
 import scala.concurrent.Future
@@ -35,7 +42,6 @@ object InMemoryStatefulFlowSuite {
 class InMemoryStatefulFlowSuite
     extends SpekkaSuite("InMemoryStatefulFlow", InMemoryStatefulFlowSuite.config) {
 
-  implicit val typedSystem = ActorSystem.wrap(system)
   import scala.concurrent.ExecutionContext.Implicits.global
 
   val inputs = 1.to(10).map(i => TestInput(i.toLong, 1)) :+ TestInput(0L, 1)

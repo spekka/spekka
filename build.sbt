@@ -41,8 +41,9 @@ lazy val commonSettings = Seq(
 
 lazy val `spekka-docs` = project
   .enablePlugins(ParadoxPlugin)
-  .enablePlugins(GitHubPagesPlugin)
+  .enablePlugins(ParadoxSitePlugin)
   .enablePlugins(ParadoxMaterialThemePlugin)
+  .enablePlugins(GitHubPagesPlugin)
   .settings(
     Compile / paradoxMaterialTheme ~= {
       _.withRepository(uri("https://github.com/spekka/spekka"))
@@ -55,13 +56,25 @@ lazy val `spekka-docs` = project
       )
       .withoutSearch()
     },
+    previewLaunchBrowser := false,
     //paradoxTheme := Some(builtinParadoxTheme("generic")),
     gitHubPagesOrgName := "spekka",
     gitHubPagesRepoName := "spekka.github.io",
     gitHubPagesSiteDir := target.value / "paradox" / "site" / "main",
     gitHubPagesBranch := "master",
     headerLicense := Some(HeaderLicense.ALv2("2022", "Andrea Zito")),
-    publish := false
+    publish := false,
+    scalacOptions --= Seq(
+      "-Xfatal-warnings"
+    ),
+    libraryDependencies ++= Seq(
+      `akka-actor-typed` % Provided,
+      `akka-stream` % Provided,
+      `akka-stream-typed` % Provided
+    )
+  ).dependsOn(
+    `spekka-context`,
+    `spekka-stateful`
   )
 
 lazy val `spekka-test` = project
@@ -112,6 +125,7 @@ lazy val `spekka-stateful` = project
     crossScalaVersions := scalaVersions
   )
   .dependsOn(
+    `spekka-context`,
     `spekka-test` % "test->test"
   )
 

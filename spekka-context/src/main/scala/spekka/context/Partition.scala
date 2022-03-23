@@ -29,27 +29,24 @@ import scala.concurrent.Future
 import scala.concurrent.Promise
 import scala.concurrent.duration.FiniteDuration
 
-/**
-* Namespace object for dynamic partitions data types and default values.
-*/
-object PartitionDynamic {
-  /**
-  * Default buffer size used for dynamic partitions used in case no custom
-  * value is provided.
+/** Namespace object for dynamic partitions data types and default values.
   */
+object PartitionDynamic {
+
+  /** Default buffer size used for dynamic partitions used in case no custom value is provided.
+    */
   val defaultBufferSize: Int = 128
 
-  /**
-  * Default completion criteria used for dynamic partition used in case no custom
-  * value is provided.
-  */
+  /** Default completion criteria used for dynamic partition used in case no custom value is
+    * provided.
+    */
   def defaultCompletionCriteria[Ctx]: CompletionCriteria[Any, Any, Ctx] =
     CompletionCriteria.never[Ctx]
 
   /** Completion criteria for dynamic partitions.
-  *
-  * Determines when a dynamically created partition should be terminated.
-  */
+    *
+    * Determines when a dynamically created partition should be terminated.
+    */
   case class CompletionCriteria[-In, -Out, Ctx] private (
       completeOnInput: Option[(In, Ctx) => Boolean],
       completeOnOutput: Option[(Out, Ctx) => Boolean],
@@ -60,9 +57,8 @@ object PartitionDynamic {
       completeOnOutput.map(_.apply(out, ctx.innerContext)).getOrElse(false)
   }
 
-  /**
-  * Dynamic partition completion criteria builders.
-  */
+  /** Dynamic partition completion criteria builders.
+    */
   object CompletionCriteria {
 
     /** Partition handlers will never be completed automatically
@@ -181,9 +177,8 @@ object PartitionDynamic {
   }
 }
 
-/**
-* Namespace object for partition related tasks.
-*/
+/** Namespace object for partition related tasks.
+  */
 object Partition {
   import FlowWithExtendedContext.syntax._
 

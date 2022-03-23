@@ -78,5 +78,5 @@ This method has an intentionally *scary* name as, when using it, the programmer 
 `FlowWithExtendedContext` guarantees have been respected. Failure to do so may result in stream deadlock and/or errors at run-time.
 @@@
 
-The final feature offered by the library is the partitioning support for `FlowWithExtendedContext`. The goal is to enable
+The last feature offered by the library is the partitioning support for `FlowWithExtendedContext`. The goal is to enable
 a boilerplate free, type safe and dynamic definition of partition trees with support for both unicast and multicast routing strategies.

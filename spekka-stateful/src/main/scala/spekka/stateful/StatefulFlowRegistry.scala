@@ -27,17 +27,19 @@ import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.FlowWithContext
 import akka.stream.typed.scaladsl.ActorFlow
 import akka.util.Timeout
+import spekka.context.ExtendedContext
+import spekka.context.FlowWithExtendedContext
 
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-/**
-  * A [[StatefulFlowRegistry]] is responsible of handling the materialization of stateful flows.
+/** A [[StatefulFlowRegistry]] is responsible of handling the materialization of stateful flows.
   *
-  * Each stateful flow manages a specific kind on entities. Once a flow has been registered for a particular 
-  * ''entityKind'', the resulting builder object can be used to instantiate flows for specific ''entities''.
+  * Each stateful flow manages a specific kind on entities. Once a flow has been registered for a
+  * particular ''entityKind'', the resulting builder object can be used to instantiate flows for
+  * specific ''entities''.
   *
   * {{{
   *   val registry = StatefulFlowRegistry(30.seconds)
@@ -48,13 +50,14 @@ import scala.concurrent.duration.Duration
   *   builder.flow("entity-id")
   * }}}
   *
-  * It is recommended to use a single registry for each application, however in case this were not possible
-  * (for instance because the registry needs to be created in a library or self-contained module) it is possible 
-  * to specify a name at construction time to differentiate multiple instances. If a registry with the same name
-  * already exists an exception will be thrown.
+  * It is recommended to use a single registry for each application, however in case this were not
+  * possible (for instance because the registry needs to be created in a library or self-contained
+  * module) it is possible to specify a name at construction time to differentiate multiple
+  * instances. If a registry with the same name already exists an exception will be thrown.
   *
-  * Note that when using multiple registries it is the responsibility of the programmer to make sure that
-  * stateful flows registered on different instances do not uses the same storage with the same entity kind.
+  * Note that when using multiple registries it is the responsibility of the programmer to make sure
+  * that stateful flows registered on different instances do not uses the same storage with the same
+  * entity kind.
   */
 class StatefulFlowRegistry private[spekka] (
     private val registryRef: ActorRef[StatefulFlowRegistry.ExposedProtocol]
@@ -63,12 +66,14 @@ class StatefulFlowRegistry private[spekka] (
     timeout: Timeout) {
   import akka.actor.typed.scaladsl.AskPattern._
 
-  /**
-    * Register a stateful flow for the specified entity kind.
+  /** Register a stateful flow for the specified entity kind.
     *
-    * @param entityKind The entity kind associated to the flow
-    * @param props The [[StatefulFlowProps]] of the flow
-    * @return a [[StatefulFlowBuilder]] instance
+    * @param entityKind
+    *   The entity kind associated to the flow
+    * @param props
+    *   The [[StatefulFlowProps]] of the flow
+    * @return
+    *   a [[StatefulFlowBuilder]] instance
     */
   def registerStatefulFlow[State, In, Out, Command](
       entityKind: String,
@@ -80,13 +85,15 @@ class StatefulFlowRegistry private[spekka] (
       )
       .map(_ => new StatefulFlowRegistry.StatefulFlowBuilderImpl(this, entityKind))
 
-  /**
-    * Register a stateful flow for the specified entity kind, blocking the thread until
-    * the registry completes the registration process.
+  /** Register a stateful flow for the specified entity kind, blocking the thread until the registry
+    * completes the registration process.
     *
-    * @param entityKind The entity kind associated to the flow
-    * @param props The [[StatefulFlowProps]] of the flow
-    * @return a [[StatefulFlowBuilder]] instance
+    * @param entityKind
+    *   The entity kind associated to the flow
+    * @param props
+    *   The [[StatefulFlowProps]] of the flow
+    * @return
+    *   a [[StatefulFlowBuilder]] instance
     */
   def registerStatefulFlowSync[State, In, Out, Command](
       entityKind: String,
@@ -190,8 +197,8 @@ class StatefulFlowRegistry private[spekka] (
 }
 
 object StatefulFlowRegistry {
-  private[spekka] sealed trait Protocol
-  private[spekka] sealed trait ExposedProtocol extends Protocol
+  sealed private[spekka] trait Protocol
+  sealed private[spekka] trait ExposedProtocol extends Protocol
 
   final private[spekka] class StatefulFlowControlImpl[Command](
       registry: StatefulFlowRegistry,
@@ -217,11 +224,11 @@ object StatefulFlowRegistry {
       } yield Done
   }
 
-  private[spekka] final class StatefulFlowBuilderImpl[In, Out, Command](
+  final private[spekka] class StatefulFlowBuilderImpl[In, Out, Command](
       private[spekka] val registry: StatefulFlowRegistry,
       val entityKind: String)
       extends StatefulFlowBuilder[In, Out, Command] {
-    def flow(
+    override def flow(
         entityId: String
       ): Flow[In, Seq[Out], Future[StatefulFlowControl[Command]]] =
       Flow.lazyFutureFlow { () =>
@@ -233,7 +240,7 @@ object StatefulFlowRegistry {
         )
       }
 
-    def flowWithContext[Ctx](
+    override def flowWithContext[Ctx](
         entityId: String
       ): FlowWithContext[In, Ctx, Seq[Out], Ctx, Future[StatefulFlowControl[Command]]] =
       FlowWithContext.fromTuples {
@@ -246,6 +253,26 @@ object StatefulFlowRegistry {
           )
         }
       }
+
+    override def flowWithExtendedContext[Ctx](
+        entityId: String
+      ): FlowWithExtendedContext[In, Seq[Out], Ctx, Future[StatefulFlowControl[Command]]] =
+      FlowWithExtendedContext.fromGraphUnsafe(
+        Flow.lazyFutureFlow { () =>
+          registry.makeFlow[
+            (In, ExtendedContext[Ctx]),
+            In,
+            Out,
+            (Seq[Out], ExtendedContext[Ctx]),
+            Command
+          ](
+            this,
+            entityId,
+            in => in._1,
+            (pass, outs) => outs -> pass._2
+          )
+        }
+      )
 
     def control(entityId: String): Future[Option[StatefulFlowControl[Command]]] =
       registry.makeControl(this, entityId)
@@ -379,18 +406,47 @@ object StatefulFlowRegistry {
       }
     }
 
-  /**
-    * Creates a [[StatefulFlowRegistry]].
+  trait ActorSystemProvider {
+    def system: ActorSystem[Nothing]
+  }
+
+  object ActorSystemProvider {
+    implicit def providerFromClassicSystem(
+        _system: akka.actor.ActorSystem
+      ): ActorSystemProvider =
+      new ActorSystemProvider {
+        def system: ActorSystem[Nothing] = ActorSystem.wrap(_system)
+      }
+
+    implicit def providerFromImplicitClassicSystem(
+        implicit _system: akka.actor.ActorSystem
+      ): ActorSystemProvider = providerFromClassicSystem(_system)
+
+    implicit def providerFromTypedSystem(_system: ActorSystem[_]): ActorSystemProvider =
+      new ActorSystemProvider {
+        def system: ActorSystem[Nothing] = _system
+      }
+
+    implicit def providerFromImplicitTypedSystem(
+        implicit _system: ActorSystem[_]
+      ): ActorSystemProvider = providerFromTypedSystem(_system)
+  }
+
+  /** Creates a [[StatefulFlowRegistry]].
     *
-    * @param queryTimeout Timeout for interactions with the registry
-    * @param name Name of the registry
-    * @return [[StatefulFlowRegistry]] instance
+    * @param queryTimeout
+    *   Timeout for interactions with the registry
+    * @param name
+    *   Name of the registry
+    * @return
+    *   [[StatefulFlowRegistry]] instance
     */
   def apply(
       queryTimeout: Timeout,
       name: String = "default"
-    )(implicit system: ActorSystem[_]
+    )(implicit systemProvider: ActorSystemProvider
     ): StatefulFlowRegistry = {
+    val system = systemProvider.system
     val ref = system
       .systemActorOf(
         registryBehavior(Map.empty, Map.empty, Map.empty),
@@ -398,5 +454,4 @@ object StatefulFlowRegistry {
       )
     new StatefulFlowRegistry(ref)(system.scheduler, system.executionContext, queryTimeout)
   }
-
 }
