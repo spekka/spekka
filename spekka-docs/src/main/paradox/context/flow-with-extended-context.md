@@ -16,7 +16,7 @@ This method has an intentionally *scary* name as, when using it, the programmer 
 
 # Creating
 
-`FlowWithExtendedContext` can be created in a similar way with respect to Akka `Flow` and `FlowWithContext`.
+A `FlowWithExtendedContext` can be created similarly to Akka `Flow` and `FlowWithContext`.
 
 For instance, considering the following definition modeling a people counting system:
 
@@ -26,12 +26,12 @@ we can create a simple flow which computes the total number of people which ente
 
 @@snip[FlowDefinition.scala](/spekka-docs/src/main/scala/FlowWithExtendedContextBasicExample.scala) { #flow-definition}
 
-# Combining
+# Connecting
 
-Once a `FlowWithExtendedContext` instance has been created, it can be combined using the standard Akka's `via` and `viaMat` operators:
+Once a `FlowWithExtendedContext` instance has been created, it can be connected to other flows using the standard Akka's `via` and `viaMat` operators:
 
 @@snip[FlowComposition.scala](/spekka-docs/src/main/scala/FlowWithExtendedContextBasicExample.scala) { #flow-composition}
 
-Our stream is summing all the received samples (assuming they are coming from a single deployment) and *committing* the relative offset as soon as the sample have been processed.
+What we achieved in this example is a stream which sums all the samples it receives as input (working under the assumption that they are coming from a single deployment) and *commits* the message offsets as soon as the processing is completed.
 
 You can find the full example here: @github[FlowWithExtendedContextBasicExample.scala](/spekka-docs/src/main/scala/FlowWithExtendedContextBasicExample.scala).

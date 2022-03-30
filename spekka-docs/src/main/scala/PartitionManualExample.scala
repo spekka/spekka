@@ -47,20 +47,25 @@ object PartitionManualExample extends App {
     Sink.foreach(o => println(s"Committing offset ${o._2}"))
 
   import PartitionTree._
+  val totalByDeploymentFlow = Partition
+    .treeBuilder[CounterSample, Offset]
+    .dynamicAuto(_.deploymentId)
+    .build { case deployment :@: KNil =>
+      entrancesSumFlow.via(printingFlow(s"deployment:${deployment.id} total"))
+    }
+
+  // #partition-entrance
+  import PartitionTree._
   val totalByEntranceFlow = Partition
     .treeBuilder[CounterSample, Offset]
     .dynamicManual(_.deploymentId, Set.empty)
     .dynamicAuto(_.entranceId)
-    .build { case (entrance: EntranceId) :@: (deployment: DeploymentId) :@: KNil =>
+    .build { case entrance :@: deployment :@: KNil =>
       entrancesSumFlow.via(printingFlow(s"deployment:${deployment.id} entrance:${entrance.id}"))
     }
+  // #partition-entrance
 
-  val totalByDeploymentFlow = Partition
-    .treeBuilder[CounterSample, Offset]
-    .dynamicManual(_.deploymentId, Set.empty)
-    .build { case deployment :@: KNil =>
-      entrancesSumFlow.via(printingFlow(s"deployment:${deployment.id} total"))
-    }
+  
 
   sealed trait CombinedMaterialization
   object CombinedMaterialization {
@@ -93,23 +98,24 @@ object PartitionManualExample extends App {
     .toMat(offsetCommittingSink)(Keep.both)
     .run()
 
-  def startProcessingDeployment(d: String): PartitionTree.PartitionControl.ControlResult[Unit] = {
-    for {
-      byDeploymentC <- control.atKeyNarrowed[CombinedMaterialization.ByDeployment]("byDeployment")
+
+  // #start-processing
+  def startCountingByEntranceFor(d: String): Future[_] = {
+    (for {
       byEntranceC <- control.atKeyNarrowed[CombinedMaterialization.ByEntrance]("byEntrance")
-      _ <- byDeploymentC.get.control.materializeKey(DeploymentId(d))
-      _ <- byEntranceC.get.control.materializeKey(DeploymentId(d))
-    } yield ()
+       _ <- byEntranceC.get.control.materializeKey(DeploymentId(d))
+    } yield ()).run
   }
+  // #start-processing
 
   // Start processing deployment a after 5 seconds
   akka.pattern.after(5.seconds) {
-    startProcessingDeployment("a").run
+    startCountingByEntranceFor("a")
   }
 
   // Start processing deployment b after 10 seconds
   akka.pattern.after(10.seconds) {
-    startProcessingDeployment("b").run
+    startCountingByEntranceFor("b")
   }
 
   // Request counter snapshots by accessing flow materialized values

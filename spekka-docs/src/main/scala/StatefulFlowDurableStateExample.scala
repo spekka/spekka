@@ -24,9 +24,15 @@ object StatefulFlowDurableStateExample extends App {
 
   val registry = StatefulFlowRegistry(30.seconds)
 
+  // #definitions
+  /** The state model */
   case class CounterState(total: Int)
-  case class GetCounter(replyTo: ActorRef[StatusReply[Int]])
 
+  /** The command used to query the flow for its current counter value */
+  case class GetCounter(replyTo: ActorRef[StatusReply[Int]])
+  // #definitions
+
+  // #logic
   import StatefulFlowLogic._
   val logic = DurableState[CounterState, CounterSample, Int, GetCounter](
     () => CounterState(0),
@@ -45,13 +51,20 @@ object StatefulFlowDurableStateExample extends App {
       DurableState.ProcessingResult(state)
     }
   )
+  // #logic
 
+  // #backend
   val backend = InMemoryStatefulFlowBackend.DurableState[CounterState]()
+  // #backend
 
+  // #props
   val flowProps = logic.propsForBackend(backend)
+  // #props
 
+  // #registration
   val byDeploymentFlowBuilder = registry.registerStatefulFlowSync("byDeployment", flowProps)
   val byEntranceFlowBuilder = registry.registerStatefulFlowSync("byEntrance", flowProps)
+  // #registration
 
   def printingFlow(name: String): FlowWithExtendedContext[Seq[Int], Unit, Offset, NotUsed] =
     FlowWithExtendedContext[Seq[Int], Offset].map { case counters =>

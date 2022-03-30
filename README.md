@@ -1,10 +1,5 @@
-# Spekka - Simple Productivity Enhancements for Akka
+# Spekka - Streaming Productivity Enhancements for Akka
 
-This library provides a series of enhancements for Akka with the goal of maximizing developer productivity.
+Spekka (Streaming Productivity Enhancements for Akka) is set of micro-libraries focused on simplifying the development of streaming microservices with Akka.
 
-
-# Sponsors
-
-Development of this project is sponsored by Thinkinside (www.thinkin.io)
-
-![ThinkIN logo](spekka-docs/src/main/paradox/images/thinkin.png)
+Refer to the [microsite](https://spekka.github.io) for more information.

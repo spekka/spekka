@@ -22,21 +22,31 @@ object StatefulFlowEventBasedExample extends App {
 
   import PeopleEntranceCounterModel._
 
+  // #registry
   val registry = StatefulFlowRegistry(30.seconds)
+  // #registry
 
+  // #definitions
+  /** The state model */ 
   case class CounterState(total: Int)
-  case class IncrementCounter(c: Int)
-  case class GetCounter(replyTo: ActorRef[StatusReply[Int]])
 
+  /** The event occurring when the counter is incremented */
+  case class CounterIncrementedEvent(c: Int)
+
+  /** The command used to query the flow for its current counter value */
+  case class GetCounterCommand(replyTo: ActorRef[StatusReply[Int]])
+  // #definitions
+
+  // #logic
   import StatefulFlowLogic._
-  val logic = EventBased[CounterState, IncrementCounter, CounterSample, GetCounter](
+  val logic = EventBased[CounterState, CounterIncrementedEvent, CounterSample, GetCounterCommand](
     () => CounterState(0),
     (state, sample) => {
       println(
         s"deployment:${sample.deploymentId} entrance:${sample.entranceId} - " +
           s"timestamp:${sample.timestamp} counter:${state.total + sample.entrances}"
       )
-      EventBased.ProcessingResult.withEvent(IncrementCounter(sample.entrances))
+      EventBased.ProcessingResult.withEvent(CounterIncrementedEvent(sample.entrances))
     },
     (state, ev) => {
       val newTotal = state.total + ev.c
@@ -47,18 +57,26 @@ object StatefulFlowEventBasedExample extends App {
       EventBased.ProcessingResult.empty
     }
   )
+  // #logic
 
-  val backend = InMemoryStatefulFlowBackend.EventBased[CounterState, IncrementCounter]()
 
+  // #backend
+  val backend = InMemoryStatefulFlowBackend.EventBased[CounterState, CounterIncrementedEvent]()
+  // #backend
+
+  // #props
   val flowProps = logic.propsForBackend(backend)
+  // #props
 
+  // #registration
   val byDeploymentFlowBuilder = registry.registerStatefulFlowSync("byDeployment", flowProps)
   val byEntranceFlowBuilder = registry.registerStatefulFlowSync("byEntrance", flowProps)
+  // #registration
 
   def printingFlow(
       name: String
-    ): FlowWithExtendedContext[Seq[IncrementCounter], Unit, Offset, NotUsed] =
-    FlowWithExtendedContext[Seq[IncrementCounter], Offset].map { case increments =>
+    ): FlowWithExtendedContext[Seq[CounterIncrementedEvent], Unit, Offset, NotUsed] =
+    FlowWithExtendedContext[Seq[CounterIncrementedEvent], Offset].map { case increments =>
       println(s"$name - counter incremented by ${increments.map(_.c).sum}")
       ()
     }
@@ -66,6 +84,7 @@ object StatefulFlowEventBasedExample extends App {
   val offsetCommittingSink: Sink[(Any, Offset), Future[Done]] =
     Sink.foreach(o => println(s"Committing offset ${o._2}"))
 
+  // #instantiation
   import PartitionTree._
   val totalByEntranceFlow = Partition
     .treeBuilder[CounterSample, Offset]
@@ -85,6 +104,7 @@ object StatefulFlowEventBasedExample extends App {
         .flowWithExtendedContext(s"${deployment.id}")
         .via(printingFlow(s"deployment:${deployment.id} total"))
     }
+    // #instantiation
 
   sealed trait CombinedMaterialization
   object CombinedMaterialization {
@@ -117,17 +137,20 @@ object StatefulFlowEventBasedExample extends App {
     .toMat(offsetCommittingSink)(Keep.both)
     .run()
 
+
   // Request counter snapshots by accessing flow materialized values
   akka.pattern.after(15.seconds) {
+    // #query
     for {
       byDeploymentC <- byDeploymentFlowBuilder.control("a")
       byEntranceC <- byEntranceFlowBuilder.control("a:1")
-      aTotalF = byDeploymentC.get.commandWithResult(GetCounter)
-      aE1TotalF = byEntranceC.get.commandWithResult(GetCounter)
+      aTotalF = byDeploymentC.get.commandWithResult(GetCounterCommand)
+      aE1TotalF = byEntranceC.get.commandWithResult(GetCounterCommand)
       aTotal <- aTotalF
       aE1Total <- aE1TotalF
       _ = println(s"*** deployment a total ${aTotal}; deployment a entrance 1 total ${aE1Total}")
     } yield ()
+    // #query
   }
 
   Await.result(done, Duration.Inf)
