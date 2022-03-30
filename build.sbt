@@ -64,6 +64,7 @@ lazy val `spekka-docs` = project
     gitHubPagesBranch := "master",
     headerLicense := Some(HeaderLicense.ALv2("2022", "Andrea Zito")),
     publish := false,
+    publish / skip := true,
     scalacOptions --= Seq(
       "-Xfatal-warnings"
     ),
@@ -80,7 +81,8 @@ lazy val `spekka-docs` = project
 lazy val `spekka-test` = project
   .settings(commonSettings)
   .settings(
-    publish := false
+    publish := false,
+    publish / skip := true
   )
   .settings(
     libraryDependencies ++= Seq(
@@ -167,6 +169,7 @@ lazy val `spekka-benchmark` = project
   .settings(commonSettings)
   .settings(
     publish := false,
+    publish / skip := true,
     libraryDependencies ++= Seq(
       `akka-stream`
     ),
@@ -179,6 +182,7 @@ lazy val spekka = (project in file("."))
   .settings(
     name := "spekka",
     publish := false,
+    publish / skip := true,
     crossScalaVersions := Nil
   )
   .aggregate(
@@ -188,5 +192,6 @@ lazy val spekka = (project in file("."))
     `spekka-stateful`,
     `spekka-stateful-sharding`,
     `spekka-stateful-akkapersistence`,
+    `spekka-codec`,
     `spekka-benchmark`
   )
