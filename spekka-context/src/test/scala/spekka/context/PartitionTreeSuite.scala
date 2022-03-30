@@ -38,7 +38,7 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
   test("single layer dynamic auto") {
     val flow = Partition
       .treeBuilder[Input, Long]
-      .dynamicAuto { case (in, _) => in.k1 }
+      .dynamicAuto(_.k1)
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
 
     val inputs = List(
@@ -49,7 +49,7 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
     )
 
     val expected = inputs.zipWithIndex.map { case (i, ctx) =>
-      Output(i.k1 :: KNil, i) -> ctx.toLong
+      Output(i.k1 :@: KNil, i) -> ctx.toLong
     }
 
     val (_, result) =
@@ -60,7 +60,7 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
   test("single layer dynamic manual pre instantiated") {
     val flow = Partition
       .treeBuilder[Input, Long]
-      .dynamicManual({ case (in, _) => in.k1 }, Set(1, 2))
+      .dynamicManual(_.k1, Set(1, 2))
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
 
     val inputs = List(
@@ -71,7 +71,7 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
     )
 
     val expected = inputs.zipWithIndex.map { case (i, ctx) =>
-      Some(Output(i.k1 :: KNil, i)) -> ctx.toLong
+      Some(Output(i.k1 :@: KNil, i)) -> ctx.toLong
     }
 
     val (_, result) =
@@ -82,7 +82,7 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
   test("single layer dynamic manual partially instantiated") {
     val flow = Partition
       .treeBuilder[Input, Long]
-      .dynamicManual({ case (in, _) => in.k1 }, Set(1))
+      .dynamicManual(_.k1, Set(1))
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
 
     val inputs = List(
@@ -94,7 +94,7 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
 
     val expected = inputs.zipWithIndex.map {
       case (i, ctx) if i.k1 == 1 =>
-        Some(Output(i.k1 :: KNil, i)) -> ctx.toLong
+        Some(Output(i.k1 :@: KNil, i)) -> ctx.toLong
       case (_, ctx) => None -> ctx.toLong
     }
 
@@ -106,11 +106,11 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
   test("single layer dynamic manual dynamically instantiated") {
     val flow = Partition
       .treeBuilder[Input, Long]
-      .dynamicManual({ case (in, _) => in.k1 }, Set.empty)
+      .dynamicManual(_.k1, Set.empty)
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
 
     val sourceProbe = TestPublisher.probe[(Input, Long)]()
-    val sinkProbe = TestSubscriber.probe[(Option[Output[Int :: KNil]], Long)]()
+    val sinkProbe = TestSubscriber.probe[(Option[Output[Int :@: KNil]], Long)]()
 
     val control =
       Source
@@ -132,9 +132,9 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
 
     sinkProbe.request(2)
     sourceProbe.sendNext(Input(1, "a", true, 3) -> 3)
-    sinkProbe.expectNext() shouldBe Some(Output(1 :: KNil, Input(1, "a", true, 3))) -> 3
+    sinkProbe.expectNext() shouldBe Some(Output(1 :@: KNil, Input(1, "a", true, 3))) -> 3
     sourceProbe.sendNext(Input(2, "b", true, 4) -> 4)
-    sinkProbe.expectNext() shouldBe Some(Output(2 :: KNil, Input(2, "b", true, 4))) -> 4
+    sinkProbe.expectNext() shouldBe Some(Output(2 :@: KNil, Input(2, "b", true, 4))) -> 4
 
     (for {
       r1 <- control.completeKey(1)
@@ -144,7 +144,7 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
     sourceProbe.sendNext(Input(1, "a", true, 5) -> 5)
     sinkProbe.expectNext() shouldBe None -> 5
     sourceProbe.sendNext(Input(2, "b", true, 6) -> 6)
-    sinkProbe.expectNext() shouldBe Some(Output(2 :: KNil, Input(2, "b", true, 6))) -> 6
+    sinkProbe.expectNext() shouldBe Some(Output(2 :@: KNil, Input(2, "b", true, 6))) -> 6
 
     sinkProbe.request(1)
     sourceProbe.sendComplete()
@@ -154,12 +154,12 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
   test("dual layer dynamic manual dynamically instantiated") {
     val flow = Partition
       .treeBuilder[Input, Long]
-      .dynamicManual({ case (in, _) => in.k1 }, Set.empty)
-      .dynamicManual({ case (in, _) => in.k2 }, Set.empty)
+      .dynamicManual(_.k1, Set.empty)
+      .dynamicManual(_.k2, Set.empty)
       .build { case ks => FlowWithExtendedContext[Input, Long].map(_.toOutput(ks)) }
 
     val sourceProbe = TestPublisher.probe[(Input, Long)]()
-    val sinkProbe = TestSubscriber.probe[(Option[Output[String :: Int :: KNil]], Long)]()
+    val sinkProbe = TestSubscriber.probe[(Option[Output[String :@: Int :@: KNil]], Long)]()
 
     val control =
       Source
@@ -183,13 +183,13 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
 
     sinkProbe.request(4)
     sourceProbe.sendNext(Input(1, "a", true, 3) -> 3)
-    sinkProbe.expectNext() shouldBe Some(Output("a" :: 1 :: KNil, Input(1, "a", true, 3))) -> 3
+    sinkProbe.expectNext() shouldBe Some(Output("a" :@: 1 :@: KNil, Input(1, "a", true, 3))) -> 3
     sourceProbe.sendNext(Input(1, "b", true, 4) -> 4)
     sinkProbe.expectNext() shouldBe None -> 4
     sourceProbe.sendNext(Input(2, "a", true, 5) -> 5)
     sinkProbe.expectNext() shouldBe None -> 5
     sourceProbe.sendNext(Input(2, "b", true, 6) -> 6)
-    sinkProbe.expectNext() shouldBe Some(Output("b" :: 2 :: KNil, Input(2, "b", true, 6))) -> 6
+    sinkProbe.expectNext() shouldBe Some(Output("b" :@: 2 :@: KNil, Input(2, "b", true, 6))) -> 6
 
     (for {
       c1 <- control.atKey(1)
@@ -200,7 +200,7 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
     sourceProbe.sendNext(Input(1, "a", true, 7) -> 7)
     sinkProbe.expectNext() shouldBe None -> 7
     sourceProbe.sendNext(Input(2, "b", true, 8) -> 8)
-    sinkProbe.expectNext() shouldBe Some(Output("b" :: 2 :: KNil, Input(2, "b", true, 8))) -> 8
+    sinkProbe.expectNext() shouldBe Some(Output("b" :@: 2 :@: KNil, Input(2, "b", true, 8))) -> 8
 
     sinkProbe.request(1)
     sourceProbe.sendComplete()
@@ -210,11 +210,11 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
   test("dual layer multi dynamic auto") {
     val flow = Partition
       .treeBuilder[Input, Long]
-      .dynamicAutoMulticast[Int] { case (in, _, ks) =>
+      .dynamicAutoMulticast[Int] { case (in, ks) =>
         if (in.k1 == 0) ks
         else Set(in.k1)
       }
-      .dynamicAutoMulticast[String] { case (in, _, ks) =>
+      .dynamicAutoMulticast[String] { case (in, ks) =>
         if (in.k2 == "*") ks
         else Set(in.k2)
       }
@@ -231,13 +231,13 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
     )
 
     val expected = List(
-      List("a" :: 1 :: KNil),
-      List("b" :: 1 :: KNil),
-      List("a" :: 1 :: KNil, "b" :: 1 :: KNil),
-      List("a" :: 2 :: KNil),
-      List("b" :: 2 :: KNil),
-      List("a" :: 2 :: KNil, "b" :: 2 :: KNil),
-      List("a" :: 1 :: KNil, "b" :: 1 :: KNil, "a" :: 2 :: KNil, "b" :: 2 :: KNil)
+      List("a" :@: 1 :@: KNil),
+      List("b" :@: 1 :@: KNil),
+      List("a" :@: 1 :@: KNil, "b" :@: 1 :@: KNil),
+      List("a" :@: 2 :@: KNil),
+      List("b" :@: 2 :@: KNil),
+      List("a" :@: 2 :@: KNil, "b" :@: 2 :@: KNil),
+      List("a" :@: 1 :@: KNil, "b" :@: 1 :@: KNil, "a" :@: 2 :@: KNil, "b" :@: 2 :@: KNil)
     ).zipWithIndex.map { case (ks, ctx) => ks -> ctx.toLong }
 
     val (_, result) =
@@ -245,7 +245,7 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
     val data = result.futureValue
 
     val dataSorted = data.map { case (ks, ctx) =>
-      ks.toList.sortBy { case k2 :: k1 :: KNil => k1 -> k2 } -> ctx
+      ks.toList.sortBy { case k2 :@: k1 :@: KNil => k1 -> k2 } -> ctx
     }
     dataSorted should contain theSameElementsAs expected
   }

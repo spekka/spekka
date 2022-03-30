@@ -15,7 +15,7 @@
  */
 
 package spekka.stateful
-import akka.actor.typed.ActorSystem
+
 import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
@@ -35,7 +35,6 @@ object InMemoryStatefulFlowSuite {
 class InMemoryStatefulFlowSuite
     extends SpekkaSuite("InMemoryStatefulFlow", InMemoryStatefulFlowSuite.config) {
 
-  implicit val typedSystem = ActorSystem.wrap(system)
   import scala.concurrent.ExecutionContext.Implicits.global
 
   val inputs = 1.to(10).map(i => TestInput(i.toLong, 1)) :+ TestInput(0L, 1)

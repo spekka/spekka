@@ -41,21 +41,48 @@ lazy val commonSettings = Seq(
 
 lazy val `spekka-docs` = project
   .enablePlugins(ParadoxPlugin)
+  .enablePlugins(ParadoxSitePlugin)
+  .enablePlugins(ParadoxMaterialThemePlugin)
   .enablePlugins(GitHubPagesPlugin)
   .settings(
-    paradoxTheme := Some(builtinParadoxTheme("generic")),
+    Compile / paradoxMaterialTheme ~= {
+      _.withRepository(uri("https://github.com/spekka/spekka"))
+      .withCopyright("Copyright © Andrea Zito")
+      .withLogoIcon("stream")
+      .withSocial(
+        uri("https://github.com/nivox"),
+        uri("https://twitter.com/nivox"),
+        uri("https://linkedin.com/in/andreazito")
+      )
+      .withoutSearch()
+    },
+    previewLaunchBrowser := false,
+    //paradoxTheme := Some(builtinParadoxTheme("generic")),
     gitHubPagesOrgName := "spekka",
     gitHubPagesRepoName := "spekka.github.io",
     gitHubPagesSiteDir := target.value / "paradox" / "site" / "main",
     gitHubPagesBranch := "master",
     headerLicense := Some(HeaderLicense.ALv2("2022", "Andrea Zito")),
-    publish := false
+    publish := false,
+    publish / skip := true,
+    scalacOptions --= Seq(
+      "-Xfatal-warnings"
+    ),
+    libraryDependencies ++= Seq(
+      `akka-actor-typed` % Provided,
+      `akka-stream` % Provided,
+      `akka-stream-typed` % Provided
+    )
+  ).dependsOn(
+    `spekka-context`,
+    `spekka-stateful`
   )
 
 lazy val `spekka-test` = project
   .settings(commonSettings)
   .settings(
-    publish := false
+    publish := false,
+    publish / skip := true
   )
   .settings(
     libraryDependencies ++= Seq(
@@ -100,6 +127,7 @@ lazy val `spekka-stateful` = project
     crossScalaVersions := scalaVersions
   )
   .dependsOn(
+    `spekka-context`,
     `spekka-test` % "test->test"
   )
 
@@ -141,6 +169,7 @@ lazy val `spekka-benchmark` = project
   .settings(commonSettings)
   .settings(
     publish := false,
+    publish / skip := true,
     libraryDependencies ++= Seq(
       `akka-stream`
     ),
@@ -153,6 +182,7 @@ lazy val spekka = (project in file("."))
   .settings(
     name := "spekka",
     publish := false,
+    publish / skip := true,
     crossScalaVersions := Nil
   )
   .aggregate(
@@ -162,5 +192,6 @@ lazy val spekka = (project in file("."))
     `spekka-stateful`,
     `spekka-stateful-sharding`,
     `spekka-stateful-akkapersistence`,
+    `spekka-codec`,
     `spekka-benchmark`
   )

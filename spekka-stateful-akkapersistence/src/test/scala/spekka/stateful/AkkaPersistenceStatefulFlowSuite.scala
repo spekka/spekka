@@ -15,8 +15,6 @@
  */
 
 package spekka.stateful
-
-import akka.actor.typed.ActorSystem
 import akka.persistence.testkit.PersistenceTestKitDurableStateStorePlugin
 import akka.persistence.testkit.PersistenceTestKitPlugin
 import akka.persistence.testkit.PersistenceTestKitSnapshotPlugin
@@ -52,7 +50,6 @@ class AkkaPersistenceStatefulFlowSuite
     extends SpekkaSuite("AkkaPersistenceStatefulFlow", AkkaPersistenceStatefulFlowSuite.config)
     with BeforeAndAfterEach {
 
-  implicit val typedSystem = ActorSystem.wrap(system)
   import scala.concurrent.ExecutionContext.Implicits.global
 
   implicit val testEventEncoder = Encoder[TestEvent] { case IncreaseCounterWithTimestamp(ts) =>

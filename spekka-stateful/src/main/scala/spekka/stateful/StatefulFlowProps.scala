@@ -18,10 +18,15 @@ package spekka.stateful
 
 import akka.actor.typed.Behavior
 
+/** A descriptor of a stateful flow ready to be registered in a [[StatefulFlowRegistry]].
+  *
+  * It represent a concrete instance of a [[StatefulFlowLogic]] associated to a particular
+  * [[StatefulFlowBackend]].
+  */
 sealed trait StatefulFlowProps[In, Out, Command] {
-  type BP
-  def backend: StatefulFlowBackend
-  def behaviorFor(
+  private[spekka] type BP
+  private[spekka] def backend: StatefulFlowBackend
+  private[spekka] def behaviorFor(
       entityKind: String,
       entityId: String
     ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, BP]]
