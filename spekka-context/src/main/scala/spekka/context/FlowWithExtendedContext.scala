@@ -253,7 +253,7 @@ final class FlowWithExtendedContext[-In, +Out, Ctx, +M] private[spekka] (
     def wrappedF() = {
       val inst = f()
 
-      in: (Out, ExtendedContext[Ctx]) => Some(inst(in._1) -> in._2)
+      in: (Out, ExtendedContext[Ctx]) => List(inst(in._1) -> in._2)
     }
 
     toFlow.statefulMapConcat(wrappedF).asFlowWithExtendedContextUnsafe
@@ -271,7 +271,7 @@ final class FlowWithExtendedContext[-In, +Out, Ctx, +M] private[spekka] (
     def wrappedF() = {
       val inst = f()
 
-      in: (Out, ExtendedContext[Ctx]) => Some(inst(in._1, in._2.innerContext) -> in._2)
+      in: (Out, ExtendedContext[Ctx]) => List(inst(in._1, in._2.innerContext) -> in._2)
     }
 
     toFlow.statefulMapConcat(wrappedF).asFlowWithExtendedContextUnsafe

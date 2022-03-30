@@ -65,8 +65,6 @@ object PartitionManualExample extends App {
     }
   // #partition-entrance
 
-  
-
   sealed trait CombinedMaterialization
   object CombinedMaterialization {
     case class ByEntrance(
@@ -98,12 +96,11 @@ object PartitionManualExample extends App {
     .toMat(offsetCommittingSink)(Keep.both)
     .run()
 
-
   // #start-processing
   def startCountingByEntranceFor(d: String): Future[_] = {
     (for {
       byEntranceC <- control.atKeyNarrowed[CombinedMaterialization.ByEntrance]("byEntrance")
-       _ <- byEntranceC.get.control.materializeKey(DeploymentId(d))
+      _ <- byEntranceC.get.control.materializeKey(DeploymentId(d))
     } yield ()).run
   }
   // #start-processing

@@ -27,7 +27,7 @@ object StatefulFlowEventBasedExample extends App {
   // #registry
 
   // #definitions
-  /** The state model */ 
+  /** The state model */
   case class CounterState(total: Int)
 
   /** The event occurring when the counter is incremented */
@@ -58,7 +58,6 @@ object StatefulFlowEventBasedExample extends App {
     }
   )
   // #logic
-
 
   // #backend
   val backend = InMemoryStatefulFlowBackend.EventBased[CounterState, CounterIncrementedEvent]()
@@ -104,7 +103,7 @@ object StatefulFlowEventBasedExample extends App {
         .flowWithExtendedContext(s"${deployment.id}")
         .via(printingFlow(s"deployment:${deployment.id} total"))
     }
-    // #instantiation
+  // #instantiation
 
   sealed trait CombinedMaterialization
   object CombinedMaterialization {
@@ -136,7 +135,6 @@ object StatefulFlowEventBasedExample extends App {
   ).viaMat(combinedFlow.ordered())(Keep.right)
     .toMat(offsetCommittingSink)(Keep.both)
     .run()
-
 
   // Request counter snapshots by accessing flow materialized values
   akka.pattern.after(15.seconds) {

@@ -104,7 +104,7 @@ object PartitionAutoExample extends App {
 
   // #stream-materialization
   val (control, done) = samplesSource
-  .viaMat(combinedFlow.ordered())(Keep.right)
+    .viaMat(combinedFlow.ordered())(Keep.right)
     .toMat(offsetCommittingSink)(Keep.both)
     .run()
   // #stream-materialization

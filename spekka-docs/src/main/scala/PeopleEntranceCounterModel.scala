@@ -18,7 +18,7 @@ object PeopleEntranceCounterModel {
     */
   case class DeploymentId(id: String)
 
-  /** The id of the entrance where the sensor is located 
+  /** The id of the entrance where the sensor is located
     */
   case class EntranceId(id: Int)
 

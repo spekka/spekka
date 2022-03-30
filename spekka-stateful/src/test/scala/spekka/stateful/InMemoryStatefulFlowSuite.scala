@@ -20,13 +20,6 @@ import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import akka.testkit.TestProbe
-import spekka.stateful.DurableStateTestLogic
-import spekka.stateful.EventBasedTestLogic
-import spekka.stateful.InMemoryStatefulFlowBackend
-import spekka.stateful.IncreaseCounterWithTimestamp
-import spekka.stateful.StatefulFlowRegistry
-import spekka.stateful.TestInput
-import spekka.stateful.TestState
 import spekka.test.SpekkaSuite
 
 import scala.concurrent.Future

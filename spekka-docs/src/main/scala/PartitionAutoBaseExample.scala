@@ -65,13 +65,13 @@ object PartitionAutoBaseExample extends App {
 
   // #stream-materialization
   val (control, done) = samplesSource
-  .viaMat(totalByDeploymentFlow.ordered())(Keep.right)
+    .viaMat(totalByDeploymentFlow.ordered())(Keep.right)
     .toMat(offsetCommittingSink)(Keep.both)
     .run()
   // #stream-materialization
 
   // Request counter snapshots by accessing flow materialized values
-  
+
   akka.pattern.after(15.seconds) {
     // #stream-query
     (for {

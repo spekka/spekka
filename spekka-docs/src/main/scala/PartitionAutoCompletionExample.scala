@@ -5,13 +5,13 @@ import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Sink
 import spekka.context.FlowWithExtendedContext
 import spekka.context.Partition
+import spekka.context.PartitionDynamic
 import spekka.context.PartitionTree
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.Await
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import spekka.context.PartitionDynamic
 
 object PartitionAutoCompletionExample extends App {
   implicit val system = ActorSystem("context-partition-auto-completion-example")
@@ -53,7 +53,10 @@ object PartitionAutoCompletionExample extends App {
   import PartitionTree._
   val totalByDeploymentFlow = Partition
     .treeBuilder[CounterSample, Offset]
-    .dynamicAuto(_.deploymentId, completionCriteria = PartitionDynamic.CompletionCriteria.onIdle(1.second))
+    .dynamicAuto(
+      _.deploymentId,
+      completionCriteria = PartitionDynamic.CompletionCriteria.onIdle(1.second)
+    )
     .build { case deployment :@: KNil =>
       entrancesSumFlow.via(printingFlow(s"deployment:${deployment.id} total"))
     }
@@ -67,20 +70,20 @@ object PartitionAutoCompletionExample extends App {
   ).filter(_._1.timestamp != 16000)
 
   val samplesSourceB = readingsSource(30.seconds)(
-    DeploymentSpec("b",2 ,2 )
+    DeploymentSpec("b", 2, 2)
   )
 
   val samplesSource = samplesSourceA.merge(samplesSourceB)
 
   // #stream-materialization
   val (control, done) = samplesSource
-  .viaMat(totalByDeploymentFlow.ordered())(Keep.right)
+    .viaMat(totalByDeploymentFlow.ordered())(Keep.right)
     .toMat(offsetCommittingSink)(Keep.both)
     .run()
   // #stream-materialization
 
   // Request counter snapshots by accessing flow materialized values
-  
+
   akka.pattern.after(15.seconds) {
     // #stream-query
     (for {

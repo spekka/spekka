@@ -2,12 +2,12 @@ import akka.Done
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Sink
+import akka.stream.scaladsl.Source
 import spekka.context.FlowWithExtendedContext
 
 import scala.concurrent.Await
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import akka.stream.scaladsl.Source
 
 object FlowWithExtendedContextBasicExample extends App {
   implicit val system = ActorSystem("context-basic-example")
@@ -40,7 +40,8 @@ object FlowWithExtendedContextBasicExample extends App {
     )
 
   // #flow-composition
-  val done: Future[Done] = sampleSource.via(entrancesSumFlow)
+  val done: Future[Done] = sampleSource
+    .via(entrancesSumFlow)
     .via(printingFlow("total"))
     .runWith(offsetCommittingSink)
   // #flow-composition
