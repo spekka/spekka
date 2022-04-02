@@ -16,8 +16,13 @@
 
 package spekka.stateful
 
+import akka.actor.ExtendedActorSystem
 import akka.actor.typed.ActorRef
+import akka.actor.typed.ActorRefResolver
+import akka.actor.typed.ActorSystem
 import akka.pattern.StatusReply
+import akka.serialization.Serializer
+import akka.serialization.SerializerWithStringManifest
 
 import scala.collection.immutable
 import scala.concurrent.Future
@@ -27,7 +32,51 @@ case class TestState(lastTimestamp: Long, counter: Long)
 sealed trait TestCommand
 case class GetCounter(replyTo: ActorRef[StatusReply[Long]]) extends TestCommand
 
+class TestCommandSerializer(system: ExtendedActorSystem) extends SerializerWithStringManifest {
+
+  private val actorRefResolver = ActorRefResolver(ActorSystem.wrap(system))
+
+  override def identifier: Int = 11111
+
+  override def manifest(o: AnyRef): String =
+    o match {
+      case _: GetCounter => "GetCounter"
+      case _ => throw new IllegalArgumentException(s"Command not valid: ${o}")
+    }
+
+  override def toBinary(o: AnyRef): Array[Byte] =
+    o match {
+      case GetCounter(replyTo) => actorRefResolver.toSerializationFormat(replyTo).getBytes("UTF8")
+      case _ => throw new IllegalArgumentException(s"Not a command: ${o}")
+    }
+
+  override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef =
+    manifest match {
+      case "GetCounter" =>
+        GetCounter(actorRefResolver.resolveActorRef(new String(bytes, "UTF8")))
+      case _ => throw new IllegalArgumentException(s"Command not valid: ${manifest}")
+    }
+}
+
 case class TestInput(timestamp: Long, discriminator: Int)
+class TestInputSerializer extends Serializer {
+
+  override def identifier: Int = 222222
+
+  override def toBinary(o: AnyRef): Array[Byte] =
+    o match {
+      case TestInput(ts, discr) => s"$ts:$discr".getBytes("UTF8")
+      case _ => throw new IllegalAccessException(s"Not a valid input: ${o}")
+    }
+
+  override def includeManifest: Boolean = false
+
+  override def fromBinary(bytes: Array[Byte], manifest: Option[Class[_]]): AnyRef = {
+    val cmps = new String(bytes, "UTF8").split(":")
+
+    TestInput(cmps(0).toLong, cmps(1).toInt)
+  }
+}
 
 sealed trait TestEvent
 case class IncreaseCounterWithTimestamp(timestamp: Long) extends TestEvent
