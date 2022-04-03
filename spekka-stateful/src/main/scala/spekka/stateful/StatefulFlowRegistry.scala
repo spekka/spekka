@@ -25,7 +25,7 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.pattern.StatusReply
 import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.FlowWithContext
-import akka.stream.typed.scaladsl.ActorFlow
+import akka.stream.scaladsl.Keep
 import akka.util.Timeout
 import spekka.context.ExtendedContext
 import spekka.context.FlowWithExtendedContext
@@ -160,21 +160,27 @@ class StatefulFlowRegistry private[spekka] (
       outputBuilder: (FIn, Seq[Out]) => FOut
     ): Future[Flow[FIn, FOut, StatefulFlowControl[Command]]] =
     getOrElseSpawnHandler(builder, entityId).map { flowHandlerRef =>
-      ActorFlow
-        .askWithStatus[FIn, StatefulFlowHandler.ProcessFlowInput[In, Out, FIn], (Seq[Out], FIn)](
-          1
-        )(flowHandlerRef) { case (in, replyTo) =>
-          StatefulFlowHandler.ProcessFlowInput(inputExtractor(in), in, replyTo)
-        }
-        .map { case (outs, pass) => outputBuilder(pass, outs) }
-        .mapMaterializedValue(_ =>
-          new StatefulFlowRegistry.StatefulFlowControlImpl(
-            this,
-            builder.entityKind,
-            entityId,
-            flowHandlerRef
-          )
-        )
+      Flow[FIn]
+        .map(i => inputExtractor(i) -> i)
+        .viaMat(
+          ActorFlow
+            .askWithStatusAndContext[In, StatefulFlowHandler.ProcessFlowInput[In, Out], Seq[
+              Out
+            ], FIn](
+              1
+            )(flowHandlerRef) { case (in, replyTo) =>
+              StatefulFlowHandler.ProcessFlowInput(in, replyTo)
+            }
+            .map { case (outs, pass) => outputBuilder(pass, outs) }
+            .mapMaterializedValue(_ =>
+              new StatefulFlowRegistry.StatefulFlowControlImpl(
+                this,
+                builder.entityKind,
+                entityId,
+                flowHandlerRef
+              )
+            )
+        )(Keep.right)
     }
 
   private[spekka] def makeControl[Command](

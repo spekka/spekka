@@ -26,7 +26,7 @@ import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import akka.pattern.StatusReply
 import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.FlowWithContext
-import akka.stream.typed.scaladsl.ActorFlow
+import akka.stream.scaladsl.Keep
 import akka.util.Timeout
 import spekka.context.ExtendedContext
 import spekka.context.FlowWithExtendedContext
@@ -117,26 +117,30 @@ class ShardedStatefulFlowRegistry private[spekka] (
       case b: ShardedStatefulFlowRegistry.StatefulFlowBuilderImpl[In, Out, Command]
           if b.registry == this =>
         Future.successful {
-          ActorFlow
-            .askWithStatus[FIn, ShardingEnvelope[
-              StatefulFlowHandler.Protocol[In, Out, Command, Nothing]
-            ], (Seq[Out], FIn)](
-              1
-            )(b.shardingRef) { case (in, replyTo) =>
-              ShardingEnvelope(
-                entityId,
-                StatefulFlowHandler.ProcessFlowInput(inputExtractor(in), in, replyTo)
-              )
-            }
-            .map { case (outs, pass) => outputBuilder(pass, outs) }
-            .mapMaterializedValue(_ =>
-              new ShardedStatefulFlowRegistry.StatefulFlowControlImpl(
-                entityId,
-                b.shardingRef.asInstanceOf[ActorRef[
-                  ShardingEnvelope[StatefulFlowHandler.Protocol[Nothing, Any, Command, Nothing]]
-                ]]
-              )
-            )
+          Flow[FIn]
+            .map(i => inputExtractor(i) -> i)
+            .viaMat(
+              ActorFlow
+                .askWithStatusAndContext[In, ShardingEnvelope[
+                  StatefulFlowHandler.Protocol[In, Out, Command, Nothing]
+                ], Seq[Out], FIn](
+                  1
+                )(b.shardingRef) { case (in, replyTo) =>
+                  ShardingEnvelope(
+                    entityId,
+                    StatefulFlowHandler.ProcessFlowInput(in, replyTo)
+                  )
+                }
+                .map { case (outs, pass) => outputBuilder(pass, outs) }
+                .mapMaterializedValue(_ =>
+                  new ShardedStatefulFlowRegistry.StatefulFlowControlImpl(
+                    entityId,
+                    b.shardingRef.asInstanceOf[ActorRef[
+                      ShardingEnvelope[StatefulFlowHandler.Protocol[Nothing, Any, Command, Nothing]]
+                    ]]
+                  )
+                )
+            )(Keep.right)
         }
 
       case _ =>
