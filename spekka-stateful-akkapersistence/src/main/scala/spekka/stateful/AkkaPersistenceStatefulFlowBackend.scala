@@ -311,13 +311,13 @@ object AkkaPersistenceStatefulFlowBackend {
                   failureAction(ex)
                   Effect.none
 
-                case flowInput: StatefulFlowHandler.ProcessFlowInput[In, Ev, _] =>
+                case flowInput: StatefulFlowHandler.ProcessFlowInput[In, Ev] =>
                   if (!state.waitingForProcessingCompletion) {
                     Try(logic.processInput(state.innerState, flowInput.in)) match {
                       case Success(result) =>
                         val successAction = () =>
                           flowInput.replyTo ! StatusReply.success(
-                            result.events -> flowInput.passthrough
+                            result.events
                           )
                         val failureAction =
                           (ex: Throwable) => flowInput.replyTo ! StatusReply.error(ex)
@@ -743,13 +743,13 @@ object AkkaPersistenceStatefulFlowBackend {
                 failureAction(ex)
                 Effect.none
 
-              case flowInput: StatefulFlowHandler.ProcessFlowInput[In, Out, _] =>
+              case flowInput: StatefulFlowHandler.ProcessFlowInput[In, Out] =>
                 if (!state.waitingForProcessingCompletion) {
                   Try(logic.processInput(state.innerState, flowInput.in)) match {
                     case Success(result) =>
                       val successAction = () =>
                         flowInput.replyTo ! StatusReply.success(
-                          result.outs -> flowInput.passthrough
+                          result.outs
                         )
                       val failureAction =
                         (ex: Throwable) => flowInput.replyTo ! StatusReply.error(ex)

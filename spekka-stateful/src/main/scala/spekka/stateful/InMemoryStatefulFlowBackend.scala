@@ -63,7 +63,7 @@ object InMemoryStatefulFlowBackend {
         ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendProtocol]] = {
         Behaviors.receive { (ctx, msg) =>
           msg match {
-            case StatefulFlowHandler.ProcessFlowInput(in, pass, replyTo) =>
+            case StatefulFlowHandler.ProcessFlowInput(in, replyTo) =>
               val result = logic.processInput(state, in)
               val updatedState = result.events.foldLeft(state)((s, ev) => logic.updateState(s, ev))
 
@@ -80,7 +80,7 @@ object InMemoryStatefulFlowBackend {
                   behavior(updatedState)
                 },
                 () => {
-                  replyTo ! StatusReply.success(result.events -> pass)
+                  replyTo ! StatusReply.success(result.events)
                   behavior(updatedState)
                 },
                 stashBufferSize
@@ -154,7 +154,7 @@ object InMemoryStatefulFlowBackend {
         ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendProtocol]] = {
         Behaviors.receive { (ctx, msg) =>
           msg match {
-            case StatefulFlowHandler.ProcessFlowInput(in, pass, replyTo) =>
+            case StatefulFlowHandler.ProcessFlowInput(in, replyTo) =>
               val result = logic.processInput(state, in)
               val updatedState = result.state
 
@@ -171,7 +171,7 @@ object InMemoryStatefulFlowBackend {
                   behavior(updatedState)
                 },
                 () => {
-                  replyTo ! StatusReply.success(result.outs -> pass)
+                  replyTo ! StatusReply.success(result.outs)
                   behavior(updatedState)
                 },
                 stashBufferSize

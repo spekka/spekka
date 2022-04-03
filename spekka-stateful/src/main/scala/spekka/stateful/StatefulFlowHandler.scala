@@ -33,10 +33,9 @@ import scala.util.Try
 private[spekka] object StatefulFlowHandler {
   sealed trait Protocol[+In, -Out, +Command, -B]
 
-  case class ProcessFlowInput[In, Out, Pass](
+  case class ProcessFlowInput[In, Out](
       in: In,
-      passthrough: Pass,
-      replyTo: ActorRef[StatusReply[(Seq[Out], Pass)]])
+      replyTo: ActorRef[StatusReply[Seq[Out]]])
       extends Protocol[In, Out, Nothing, Any]
 
   case class ProcessCommand[Command](
@@ -58,7 +57,7 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
 
   override def manifest(o: AnyRef): String =
     o match {
-      case _: StatefulFlowHandler.ProcessFlowInput[_, _, _] => "flow-input"
+      case _: StatefulFlowHandler.ProcessFlowInput[_, _] => "flow-input"
       case _: StatefulFlowHandler.ProcessCommand[_] => "command"
       case _: StatefulFlowHandler.TerminateRequest => "terminate"
       case _ =>
@@ -104,21 +103,18 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
 
   override def toBinary(o: AnyRef): Array[Byte] =
     o match {
-      case StatefulFlowHandler.ProcessFlowInput(in, pass, replyTo) =>
+      case StatefulFlowHandler.ProcessFlowInput(in, replyTo) =>
         (for {
           inBytes <- serializeObj(in.asInstanceOf[AnyRef])
-          passBytes <- serializeObj(pass.asInstanceOf[AnyRef])
           actorRefBytes = actorRefResolver
             .toSerializationFormat(replyTo)
             .getBytes(StandardCharsets.UTF_8)
           serBytes = {
-            val buff = ByteBuffer.allocate(inBytes.size + passBytes.size + actorRefBytes.size + 12)
+            val buff = ByteBuffer.allocate(inBytes.size + actorRefBytes.size + 8)
             buff
               .putInt(inBytes.size)
-              .putInt(passBytes.size)
               .putInt(actorRefBytes.size)
               .put(inBytes)
-              .put(passBytes)
               .put(actorRefBytes)
 
             buff.array()
@@ -152,27 +148,23 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
           val buff = ByteBuffer.wrap(bytes)
 
           val inBytesLength = buff.getInt()
-          val passBytesLength = buff.getInt()
           val actorRefBytesLength = buff.getInt()
 
           val inBytes = Array.ofDim[Byte](inBytesLength)
-          val passBytes = Array.ofDim[Byte](passBytesLength)
           val actorRefBytes = Array.ofDim[Byte](actorRefBytesLength)
 
           buff.get(inBytes)
-          buff.get(passBytes)
           buff.get(actorRefBytes)
 
           val in = deserializeObj(inBytes)
-          val pass = deserializeObj(passBytes)
           val actorRef =
             actorRefResolver.resolveActorRef(new String(actorRefBytes, StandardCharsets.UTF_8))
 
-          StatefulFlowHandler.ProcessFlowInput(in, pass, actorRef)
+          StatefulFlowHandler.ProcessFlowInput(in, actorRef)
         } catch {
           case e: Exception =>
             throw new IllegalArgumentException(
-              s"Error de-serializing object of type ${classOf[StatefulFlowHandler.ProcessFlowInput[_, _, _]]
+              s"Error de-serializing object of type ${classOf[StatefulFlowHandler.ProcessFlowInput[_, _]]
                 .getName()}",
               e
             )
