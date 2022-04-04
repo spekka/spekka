@@ -87,31 +87,35 @@ private[spekka] object PartitionStaticInternal {
       pCtx.partitionKey
     }
 
-    val preprocessingFlow = builder.add(Flow[(In, ExtendedContext[Ctx])].mapConcat {
-      case (in, ctx) =>
+    val preprocessingFlow = builder.add(Flow[(In, ExtendedContext[Ctx])].statefulMapConcat { () =>
+      var globalSeqNr = 0L
+
+      { case (in, ctx) =>
         val outPartitions = keyF(in, ctx.innerContext, flowByKey.keySet)
+        globalSeqNr += 1
 
         outPartitions.size match {
           case 0 =>
             val outCtx = ctx
-              .push(MultiplexedContext(ctx.hashCode(), 1))
+              .push(MultiplexedContext(globalSeqNr, 1))
               .push(PartitionedContext(None))
             List(in -> outCtx)
 
           case 1 =>
             val outCtx = ctx
-              .push(MultiplexedContext(ctx.hashCode(), 1))
+              .push(MultiplexedContext(globalSeqNr, 1))
               .push(PartitionedContext(outPartitions.headOption))
             List(in -> outCtx)
 
           case n =>
-            val baseOutCtx = ctx.push(MultiplexedContext(ctx.hashCode(), n))
+            val baseOutCtx = ctx.push(MultiplexedContext(globalSeqNr, n))
 
             outPartitions.iterator.map { k =>
               val outCtx = baseOutCtx.push(PartitionedContext(Some(k)))
               in -> outCtx
             }.toList
         }
+      }
     })
 
     val contextPassthroughFlow = builder.add(

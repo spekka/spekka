@@ -50,7 +50,7 @@ private[spekka] object Multiplexed {
 
     override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
       new GraphStageLogic(shape) {
-        val contextBufferMap: mutable.Map[Int, mutable.ListBuffer[In]] = mutable.Map()
+        val contextBufferMap: mutable.Map[Long, mutable.ListBuffer[In]] = mutable.Map()
         val outputBuffer: mutable.ListBuffer[(immutable.Iterable[In], ExtendedContext[Ctx])] =
           mutable.ListBuffer()
 
@@ -74,7 +74,7 @@ private[spekka] object Multiplexed {
                   pushOrBuffer(List(value), outCtx)
 
                 case Some(mCtx) =>
-                  val ctxBuffer = contextBufferMap.getOrElseUpdate(mCtx.hash, mutable.ListBuffer())
+                  val ctxBuffer = contextBufferMap.getOrElseUpdate(mCtx.seqNr, mutable.ListBuffer())
                   if (ctxBuffer.size + 1 == mCtx.n) {
                     pushOrBuffer(value :: ctxBuffer.toList, outCtx)
                   } else {
@@ -120,7 +120,7 @@ private[spekka] object Multiplexed {
 
     override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
       new GraphStageLogic(shape) {
-        var currCtxHash: Option[Int] = None
+        var currCtxSeqNr: Option[Long] = None
         val resultBuff = mutable.ListBuffer[In]()
 
         setHandler(
@@ -133,34 +133,34 @@ private[spekka] object Multiplexed {
               )
 
               if (mCtx.n == 0) {
-                if (currCtxHash.nonEmpty)
+                if (currCtxSeqNr.nonEmpty)
                   throw new IllegalStateException(
                     "Received context differs from current multiplexed one. Upstream flow has reordered/filtered!"
                   )
                 emit(out, Nil -> outCtx)
               } else if (mCtx.n == 1) {
-                if (currCtxHash.nonEmpty)
+                if (currCtxSeqNr.nonEmpty)
                   throw new IllegalStateException(
                     "Received context differs from current multiplexed one. Upstream flow has reordered/filtered!"
                   )
 
                 emit(out, List(value) -> outCtx)
               } else {
-                currCtxHash match {
+                currCtxSeqNr match {
                   case Some(hash) =>
-                    if (hash != mCtx.hash)
+                    if (hash != mCtx.seqNr)
                       throw new IllegalStateException(
                         "Received context differs from current multiplexed one. Upstream flow has reordered/filtered!"
                       )
 
-                  case None => currCtxHash = Some(mCtx.hash)
+                  case None => currCtxSeqNr = Some(mCtx.seqNr)
                 }
 
                 resultBuff += value
                 if (mCtx.n == resultBuff.size) {
                   val results = resultBuff.toList
                   resultBuff.clear()
-                  currCtxHash = None
+                  currCtxSeqNr = None
                   emit(out, results -> outCtx)
                 } else {
                   pull(in)
@@ -208,10 +208,15 @@ private[spekka] object Multiplexed {
     import FlowWithExtendedContext.syntax._
 
     val multiplexedFlow = Flow[(immutable.Iterable[In], ExtendedContext[Ctx])]
-      .mapConcat { case (ins, ctx) =>
-        val n = ins.size
-        val outCtx = ctx.push(MultiplexedContext(ctx.hashCode(), n))
-        ins.iterator.map(_ -> outCtx).toList
+      .statefulMapConcat { () =>
+        var globalSeqNr = 0L
+
+        { case (ins, ctx) =>
+          globalSeqNr += 1
+          val n = ins.size
+          val outCtx = ctx.push(MultiplexedContext(globalSeqNr, n))
+          ins.iterator.map(_ -> outCtx).toList
+        }
       }
       .asFlowWithExtendedContextUnsafe
       .viaMat(elementFlow)(Keep.right)
