@@ -154,7 +154,7 @@ private[spekka] object Ordered {
               if (seqCtx.seqNr < nextSeqNr && seqCtx.seqNr < nextSeqNr + bufferSize) {
                 failStage(
                   new IllegalStateException(
-                    s"Received old sequence number. Expected minimum [$nextSeqNr]"
+                    s"Received unexpected sequence number ${seqCtx.seqNr}. Expected range [$nextSeqNr, ${nextSeqNr + bufferSize}]"
                   )
                 )
               } else if (seqCtx.seqNr == nextSeqNr) {

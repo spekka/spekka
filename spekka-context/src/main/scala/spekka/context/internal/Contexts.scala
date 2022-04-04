@@ -18,14 +18,15 @@ package spekka.context.internal
 
 import spekka.context.StackableContext
 
-/** Defines that a particular context having a hash equal to `hash` is multiplexed for `n` elements
+/** Defines that a particular context having a particular sequence number is multiplexed for `n`
+  * elements
   *
-  * @param hash
-  *   The hash of the original context
+  * @param seqNr
+  *   The sequence number associated to the context
   * @param n
   *   The number of elements the context is multiplexed for
   */
-private[spekka] case class MultiplexedContext(hash: Int, n: Int) extends StackableContext
+private[spekka] case class MultiplexedContext(seqNr: Long, n: Int) extends StackableContext
 
 /** Defines the sequence number associated to a particular context
   *

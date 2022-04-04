@@ -396,7 +396,7 @@ private[spekka] object PartitionDynamicInternal {
           val keys = multiPartitioner.keyF(data, ctx.innerContext, liveKeys)
           val newCtx = ctx.push(
             MultiplexedContext(
-              globalSeqNr.hashCode(),
+              globalSeqNr,
               Math.max(keys.size, 1)
             )
           )
