@@ -35,8 +35,10 @@ private[spekka] object StatefulFlowHandler {
 
   case class ProcessFlowInput[In, Out](
       in: In,
-      replyTo: ActorRef[StatusReply[Seq[Out]]])
+      replyTo: ActorRef[StatusReply[ProcessFlowOutput[Out]]])
       extends Protocol[In, Out, Nothing, Any]
+
+  case class ProcessFlowOutput[Out](outs: Seq[Out])
 
   case class ProcessCommand[Command](
       command: Command)
@@ -58,6 +60,7 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
   override def manifest(o: AnyRef): String =
     o match {
       case _: StatefulFlowHandler.ProcessFlowInput[_, _] => "flow-input"
+      case _: StatefulFlowHandler.ProcessFlowOutput[_] => "flow-output"
       case _: StatefulFlowHandler.ProcessCommand[_] => "command"
       case _: StatefulFlowHandler.TerminateRequest => "terminate"
       case _ =>
@@ -86,9 +89,7 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
     } yield serBytes)
   }
 
-  private def deserializeObj(bytes: Array[Byte]): AnyRef = {
-    val buff = ByteBuffer.wrap(bytes)
-
+  private def deserializeObj(buff: ByteBuffer): AnyRef = {
     val serializerId = buff.getInt()
     val manifestSize = buff.getInt()
     val objSize = buff.getInt()
@@ -110,10 +111,8 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
             .toSerializationFormat(replyTo)
             .getBytes(StandardCharsets.UTF_8)
           serBytes = {
-            val buff = ByteBuffer.allocate(inBytes.size + actorRefBytes.size + 8)
+            val buff = ByteBuffer.allocate(inBytes.size + actorRefBytes.size)
             buff
-              .putInt(inBytes.size)
-              .putInt(actorRefBytes.size)
               .put(inBytes)
               .put(actorRefBytes)
 
@@ -124,6 +123,25 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
             throw new IllegalArgumentException(s"Error serializing ${o.getClass().getName()}", err),
           identity
         )
+
+      case StatefulFlowHandler.ProcessFlowOutput(outs) =>
+        val outsBytes = outs.iterator.map { o =>
+          serializeObj(o.asInstanceOf[AnyRef]).fold(
+            err =>
+              throw new IllegalArgumentException(
+                s"Error serializing ${o.getClass().getName()}",
+                err
+              ),
+            identity
+          )
+        }.toList
+
+        val totalSize = outsBytes.iterator.map(_.size).sum
+
+        val buff = ByteBuffer.allocate(totalSize)
+        outsBytes.foreach(buff.put)
+
+        buff.array()
 
       case StatefulFlowHandler.ProcessCommand(command) =>
         serializeObj(command.asInstanceOf[AnyRef]).fold(
@@ -147,16 +165,9 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
         try {
           val buff = ByteBuffer.wrap(bytes)
 
-          val inBytesLength = buff.getInt()
-          val actorRefBytesLength = buff.getInt()
-
-          val inBytes = Array.ofDim[Byte](inBytesLength)
-          val actorRefBytes = Array.ofDim[Byte](actorRefBytesLength)
-
-          buff.get(inBytes)
+          val in = deserializeObj(buff)
+          val actorRefBytes = Array.ofDim[Byte](buff.remaining())
           buff.get(actorRefBytes)
-
-          val in = deserializeObj(inBytes)
           val actorRef =
             actorRefResolver.resolveActorRef(new String(actorRefBytes, StandardCharsets.UTF_8))
 
@@ -170,9 +181,28 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
             )
         }
 
+      case "flow-output" =>
+        try {
+          val buff = ByteBuffer.wrap(bytes)
+          val outs = scala.collection.mutable.ListBuffer[AnyRef]()
+          while (buff.hasRemaining()) {
+            outs += deserializeObj(buff)
+          }
+
+          StatefulFlowHandler.ProcessFlowOutput(outs.toList)
+        } catch {
+          case e: Exception =>
+            throw new IllegalArgumentException(
+              s"Error de-serializing object of type ${classOf[StatefulFlowHandler.ProcessFlowOutput[_]]
+                .getName()}",
+              e
+            )
+        }
+
       case "command" =>
         try {
-          val command = deserializeObj(bytes)
+          val buff = ByteBuffer.wrap(bytes)
+          val command = deserializeObj(buff)
           StatefulFlowHandler.ProcessCommand(command)
         } catch {
           case e: Exception =>

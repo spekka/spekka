@@ -317,7 +317,7 @@ object AkkaPersistenceStatefulFlowBackend {
                       case Success(result) =>
                         val successAction = () =>
                           flowInput.replyTo ! StatusReply.success(
-                            result.events
+                            StatefulFlowHandler.ProcessFlowOutput(result.events)
                           )
                         val failureAction =
                           (ex: Throwable) => flowInput.replyTo ! StatusReply.error(ex)
@@ -749,7 +749,7 @@ object AkkaPersistenceStatefulFlowBackend {
                     case Success(result) =>
                       val successAction = () =>
                         flowInput.replyTo ! StatusReply.success(
-                          result.outs
+                          StatefulFlowHandler.ProcessFlowOutput(result.outs)
                         )
                       val failureAction =
                         (ex: Throwable) => flowInput.replyTo ! StatusReply.error(ex)
