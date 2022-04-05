@@ -164,14 +164,15 @@ class StatefulFlowRegistry private[spekka] (
         .map(i => inputExtractor(i) -> i)
         .viaMat(
           ActorFlow
-            .askWithStatusAndContext[In, StatefulFlowHandler.ProcessFlowInput[In, Out], Seq[
+            .askWithStatusAndContext[In, StatefulFlowHandler.ProcessFlowInput[
+              In,
               Out
-            ], FIn](
+            ], StatefulFlowHandler.ProcessFlowOutput[Out], FIn](
               1
             )(flowHandlerRef) { case (in, replyTo) =>
               StatefulFlowHandler.ProcessFlowInput(in, replyTo)
             }
-            .map { case (outs, pass) => outputBuilder(pass, outs) }
+            .map { case (out, pass) => outputBuilder(pass, out.outs) }
             .mapMaterializedValue(_ =>
               new StatefulFlowRegistry.StatefulFlowControlImpl(
                 this,

@@ -80,7 +80,9 @@ object InMemoryStatefulFlowBackend {
                   behavior(updatedState)
                 },
                 () => {
-                  replyTo ! StatusReply.success(result.events)
+                  replyTo ! StatusReply.success(
+                    StatefulFlowHandler.ProcessFlowOutput(result.events)
+                  )
                   behavior(updatedState)
                 },
                 stashBufferSize
@@ -171,7 +173,7 @@ object InMemoryStatefulFlowBackend {
                   behavior(updatedState)
                 },
                 () => {
-                  replyTo ! StatusReply.success(result.outs)
+                  replyTo ! StatusReply.success(StatefulFlowHandler.ProcessFlowOutput(result.outs))
                   behavior(updatedState)
                 },
                 stashBufferSize

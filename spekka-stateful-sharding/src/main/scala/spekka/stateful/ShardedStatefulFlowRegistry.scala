@@ -123,7 +123,7 @@ class ShardedStatefulFlowRegistry private[spekka] (
               ActorFlow
                 .askWithStatusAndContext[In, ShardingEnvelope[
                   StatefulFlowHandler.Protocol[In, Out, Command, Nothing]
-                ], Seq[Out], FIn](
+                ], StatefulFlowHandler.ProcessFlowOutput[Out], FIn](
                   1
                 )(b.shardingRef) { case (in, replyTo) =>
                   ShardingEnvelope(
@@ -131,7 +131,7 @@ class ShardedStatefulFlowRegistry private[spekka] (
                     StatefulFlowHandler.ProcessFlowInput(in, replyTo)
                   )
                 }
-                .map { case (outs, pass) => outputBuilder(pass, outs) }
+                .map { case (out, pass) => outputBuilder(pass, out.outs) }
                 .mapMaterializedValue(_ =>
                   new ShardedStatefulFlowRegistry.StatefulFlowControlImpl(
                     entityId,
