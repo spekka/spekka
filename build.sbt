@@ -48,13 +48,14 @@ lazy val `spekka-docs` = project
     Compile / paradoxMaterialTheme ~= {
       _.withRepository(uri("https://github.com/spekka/spekka"))
       .withCopyright("Copyright © Andrea Zito")
-      .withLogoIcon("stream")
+      .withLogoIcon("polymer")
       .withSocial(
         uri("https://github.com/nivox"),
         uri("https://twitter.com/nivox"),
         uri("https://linkedin.com/in/andreazito")
       )
       .withoutSearch()
+      .withGoogleAnalytics("G-H13X389S63")
     },
     previewLaunchBrowser := false,
     //paradoxTheme := Some(builtinParadoxTheme("generic")),
