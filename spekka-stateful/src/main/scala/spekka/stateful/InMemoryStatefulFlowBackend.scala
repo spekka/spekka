@@ -16,14 +16,14 @@
 
 package spekka.stateful
 
+import akka.actor.typed.ActorRef
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import akka.pattern.StatusReply
-import akka.actor.typed.ActorRef
-import scala.concurrent.ExecutionContext
-import scala.util.Try
-import scala.util.Success
+
 import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 
 /** An in memory implementation of [[StatefulFlowBackend]].
   *

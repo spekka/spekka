@@ -126,7 +126,7 @@ class InMemoryStatefulFlowSuite
 
     val flowProps = EventBasedTestLogicAsync(
       TestState(0, 0),
-      100.millis, 
+      100.millis,
       inputBeforeSideEffectsF = (state, input) => {
         if (input.timestamp == 5L)
           List(() =>
@@ -257,58 +257,58 @@ class InMemoryStatefulFlowSuite
   }
 
   test("durable state async - simple flow with side effects") {
-      val inputSideEffectsProbe = TestProbe()
-      val commandSideEffectsProbe = TestProbe()
+    val inputSideEffectsProbe = TestProbe()
+    val commandSideEffectsProbe = TestProbe()
 
-      val flowProps = DurableStateTestLogicAsync(
-        TestState(0, 0),
-        100.millis,
-        inputBeforeSideEffectsF = (state, input) => {
-          if (input.timestamp == 5L)
-            List(() =>
-              Future.successful(inputSideEffectsProbe.ref ! ("before" -> state.lastTimestamp))
-            )
-          else Nil
-        },
-        inputAfterSideEffectsF = (state, input) => {
-          if (input.timestamp == 5L)
-            List(() =>
-              Future.successful(inputSideEffectsProbe.ref ! ("after" -> state.lastTimestamp))
-            )
-          else Nil
-        },
-        commandBeforeSideEffectsF = (_, _) => {
-          List(() => Future.successful(commandSideEffectsProbe.ref ! "before"))
-        },
-        commandAfterSideEffectsF = (_, _) => {
-          List(() => Future.successful(commandSideEffectsProbe.ref ! "after"))
-        }
-      )(system).propsForBackend(InMemoryStatefulFlowBackend.DurableStateAsync())
+    val flowProps = DurableStateTestLogicAsync(
+      TestState(0, 0),
+      100.millis,
+      inputBeforeSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("before" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      inputAfterSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("after" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      commandBeforeSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "before"))
+      },
+      commandAfterSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "after"))
+      }
+    )(system).propsForBackend(InMemoryStatefulFlowBackend.DurableStateAsync())
 
-      val resultF = for {
-        builder <- registry.registerStatefulFlow("testKind-durable-async-effects", flowProps)
+    val resultF = for {
+      builder <- registry.registerStatefulFlow("testKind-durable-async-effects", flowProps)
 
-        (controlF, resF) = Source(inputs)
-          .viaMat(builder.flow("1"))(Keep.right)
-          .toMat(Sink.seq)(Keep.both)
-          .run()
+      (controlF, resF) = Source(inputs)
+        .viaMat(builder.flow("1"))(Keep.right)
+        .toMat(Sink.seq)(Keep.both)
+        .run()
 
-        _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
-        _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
 
-        res <- resF
-        control <- controlF
+      res <- resF
+      control <- controlF
 
-        _ = commandSideEffectsProbe.expectNoMessage()
-        counter <- control.commandWithResult(GetCounter(_))
-        _ = commandSideEffectsProbe.expectMsg("before")
-        _ = commandSideEffectsProbe.expectMsg("after")
+      _ = commandSideEffectsProbe.expectNoMessage()
+      counter <- control.commandWithResult(GetCounter(_))
+      _ = commandSideEffectsProbe.expectMsg("before")
+      _ = commandSideEffectsProbe.expectMsg("after")
 
-        _ <- control.terminate()
-      } yield (counter, res.flatten)
+      _ <- control.terminate()
+    } yield (counter, res.flatten)
 
-      val (counter, events) = resultF.futureValue
-      counter shouldBe 10L
-      events shouldBe 1.to(10).map(i => IncreaseCounterWithTimestamp(i.toLong))
-    }
+    val (counter, events) = resultF.futureValue
+    counter shouldBe 10L
+    events shouldBe 1.to(10).map(i => IncreaseCounterWithTimestamp(i.toLong))
+  }
 }

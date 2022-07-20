@@ -266,109 +266,109 @@ class AkkaPersistenceStatefulFlowSuite
   }
 
   test("event based async - simple flow with side effects") {
-      val inputSideEffectsProbe = TestProbe()
-      val commandSideEffectsProbe = TestProbe()
+    val inputSideEffectsProbe = TestProbe()
+    val commandSideEffectsProbe = TestProbe()
 
-      val flowProps = EventBasedTestLogicAsync(
-        TestState(0, 0),
-        100.millis,
-        inputBeforeSideEffectsF = (state, input) => {
-          if (input.timestamp == 5L)
-            List(() =>
-              Future.successful(inputSideEffectsProbe.ref ! ("before" -> state.lastTimestamp))
-            )
-          else Nil
-        },
-        inputAfterSideEffectsF = (state, input) => {
-          if (input.timestamp == 5L)
-            List(() =>
-              Future.successful(inputSideEffectsProbe.ref ! ("after" -> state.lastTimestamp))
-            )
-          else Nil
-        },
-        commandBeforeSideEffectsF = (_, _) => {
-          List(() => Future.successful(commandSideEffectsProbe.ref ! "before"))
-        },
-        commandAfterSideEffectsF = (_, _) => {
-          List(() => Future.successful(commandSideEffectsProbe.ref ! "after"))
-        }
-      ).propsForBackend(
-          AkkaPersistenceStatefulFlowBackend
-            .EventBasedAsync[TestState, TestEvent](
-              AkkaPersistenceStatefulFlowBackend.EventBased.PersistencePlugin.CustomStoragePlugin(
-                PersistenceTestKitPlugin.PluginId,
-                PersistenceTestKitSnapshotPlugin.PluginId
-              ),
-              RetentionCriteria.snapshotEvery(4, 3).withDeleteEventsOnSnapshot
-            )
-            .withEventCodec
-            .withSnapshotCodec
+    val flowProps = EventBasedTestLogicAsync(
+      TestState(0, 0),
+      100.millis,
+      inputBeforeSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("before" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      inputAfterSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("after" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      commandBeforeSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "before"))
+      },
+      commandAfterSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "after"))
+      }
+    ).propsForBackend(
+      AkkaPersistenceStatefulFlowBackend
+        .EventBasedAsync[TestState, TestEvent](
+          AkkaPersistenceStatefulFlowBackend.EventBased.PersistencePlugin.CustomStoragePlugin(
+            PersistenceTestKitPlugin.PluginId,
+            PersistenceTestKitSnapshotPlugin.PluginId
+          ),
+          RetentionCriteria.snapshotEvery(4, 3).withDeleteEventsOnSnapshot
         )
+        .withEventCodec
+        .withSnapshotCodec
+    )
 
-      val builder = registry.registerStatefulFlowSync("testKind-event-effects-async", flowProps)
+    val builder = registry.registerStatefulFlowSync("testKind-event-effects-async", flowProps)
 
-      val (controlF, resF) = Source(inputs)
-        .viaMat(builder.flow("1"))(Keep.right)
-        .toMat(Sink.seq)(Keep.both)
-        .run()
+    val (controlF, resF) = Source(inputs)
+      .viaMat(builder.flow("1"))(Keep.right)
+      .toMat(Sink.seq)(Keep.both)
+      .run()
 
-      inputSideEffectsProbe.expectMsg(("before" -> 4L))
-      inputSideEffectsProbe.expectMsg(("after" -> 4L))
+    inputSideEffectsProbe.expectMsg(("before" -> 4L))
+    inputSideEffectsProbe.expectMsg(("after" -> 4L))
 
-      val events = resF.futureValue.flatten
-      val control = controlF.futureValue
+    val events = resF.futureValue.flatten
+    val control = controlF.futureValue
 
-      commandSideEffectsProbe.expectNoMessage()
-      val counter = control.commandWithResult(GetCounter(_)).futureValue
-      commandSideEffectsProbe.expectMsg("before")
-      commandSideEffectsProbe.expectMsg("after")
+    commandSideEffectsProbe.expectNoMessage()
+    val counter = control.commandWithResult(GetCounter(_)).futureValue
+    commandSideEffectsProbe.expectMsg("before")
+    commandSideEffectsProbe.expectMsg("after")
 
-      control.terminate().futureValue
+    control.terminate().futureValue
 
-      counter shouldBe 10L
-      events shouldBe 1.to(10).map(i => IncreaseCounterWithTimestamp(i.toLong))
+    counter shouldBe 10L
+    events shouldBe 1.to(10).map(i => IncreaseCounterWithTimestamp(i.toLong))
 
-      eventsTestKit
-        .persistedInStorage(PersistenceId("testKind-event-effects-async", "1").id)
-        .map {
+    eventsTestKit
+      .persistedInStorage(PersistenceId("testKind-event-effects-async", "1").id)
+      .map {
+        case data: AkkaPersistenceStatefulFlowBackend.SerializedData =>
+          testEventDecoder.decode(data.bytes)
+        case _ => throw new IllegalArgumentException("Unexpected serialization")
+      }
+      .map(_.get) shouldBe events
+
+    snapshotTestKit
+      .persistedInStorage(PersistenceId("testKind-event-effects-async", "1").id)
+      .map {
+        _._2 match {
           case data: AkkaPersistenceStatefulFlowBackend.SerializedData =>
-            testEventDecoder.decode(data.bytes)
+            testStateDecoder.decode(data.bytes)
           case _ => throw new IllegalArgumentException("Unexpected serialization")
         }
-        .map(_.get) shouldBe events
+      }
+      .map(_.get) should contain theSameElementsAs Set(
+      TestState(4, 4),
+      TestState(8, 8)
+    )
 
-      snapshotTestKit
-        .persistedInStorage(PersistenceId("testKind-event-effects-async", "1").id)
-        .map {
-          _._2 match {
-            case data: AkkaPersistenceStatefulFlowBackend.SerializedData =>
-              testStateDecoder.decode(data.bytes)
-            case _ => throw new IllegalArgumentException("Unexpected serialization")
-          }
-        }
-        .map(_.get) should contain theSameElementsAs Set(
-        TestState(4, 4),
-        TestState(8, 8)
-      )
+    // In order to test the recovery, lets just restart the flow and ask for the state
+    builder.control("1").futureValue shouldBe None
+    val (control1F, res1F) = Source
+      .single(TestInput(0L, 1))
+      .viaMat(builder.flow("1"))(Keep.right)
+      .toMat(Sink.seq)(Keep.both)
+      .run()
 
-      // In order to test the recovery, lets just restart the flow and ask for the state
-      builder.control("1").futureValue shouldBe None
-      val (control1F, res1F) = Source
-        .single(TestInput(0L, 1))
-        .viaMat(builder.flow("1"))(Keep.right)
-        .toMat(Sink.seq)(Keep.both)
-        .run()
+    val events1 = res1F.futureValue.flatten
+    val control1 = control1F.futureValue
 
-      val events1 = res1F.futureValue.flatten
-      val control1 = control1F.futureValue
+    val counter1 = control1.commandWithResult(GetCounter(_)).futureValue
 
-      val counter1 = control1.commandWithResult(GetCounter(_)).futureValue
+    control1.terminate().futureValue
 
-      control1.terminate().futureValue
-
-      counter1 shouldBe 10L
-      events1 shouldBe empty
-    }
+    counter1 shouldBe 10L
+    events1 shouldBe empty
+  }
 
   test("durable state - simple flow no side effects") {
     val flowProps = DurableStateTestLogic(TestState(0, 0))
@@ -520,94 +520,94 @@ class AkkaPersistenceStatefulFlowSuite
   }
 
   test("durable state async - simple flow with side effects") {
-      val inputSideEffectsProbe = TestProbe()
-      val commandSideEffectsProbe = TestProbe()
+    val inputSideEffectsProbe = TestProbe()
+    val commandSideEffectsProbe = TestProbe()
 
-      val flowProps = DurableStateTestLogicAsync(
-        TestState(0, 0),
-        100.millis,
-        inputBeforeSideEffectsF = (state, input) => {
-          if (input.timestamp == 5L)
-            List(() =>
-              Future.successful(inputSideEffectsProbe.ref ! ("before" -> state.lastTimestamp))
+    val flowProps = DurableStateTestLogicAsync(
+      TestState(0, 0),
+      100.millis,
+      inputBeforeSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("before" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      inputAfterSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("after" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      commandBeforeSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "before"))
+      },
+      commandAfterSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "after"))
+      }
+    )
+      .propsForBackend(
+        AkkaPersistenceStatefulFlowBackend
+          .DurableStateAsync[TestState](
+            AkkaPersistenceStatefulFlowBackend.DurableState.PersistencePlugin.CustomStoragePlugin(
+              PersistenceTestKitDurableStateStorePlugin.PluginId
             )
-          else Nil
-        },
-        inputAfterSideEffectsF = (state, input) => {
-          if (input.timestamp == 5L)
-            List(() =>
-              Future.successful(inputSideEffectsProbe.ref ! ("after" -> state.lastTimestamp))
-            )
-          else Nil
-        },
-        commandBeforeSideEffectsF = (_, _) => {
-          List(() => Future.successful(commandSideEffectsProbe.ref ! "before"))
-        },
-        commandAfterSideEffectsF = (_, _) => {
-          List(() => Future.successful(commandSideEffectsProbe.ref ! "after"))
-        }
+          )
+          .withSnapshotCodec
       )
-        .propsForBackend(
-          AkkaPersistenceStatefulFlowBackend
-            .DurableStateAsync[TestState](
-              AkkaPersistenceStatefulFlowBackend.DurableState.PersistencePlugin.CustomStoragePlugin(
-                PersistenceTestKitDurableStateStorePlugin.PluginId
-              )
-            )
-            .withSnapshotCodec
-        )
 
-      val resultF = for {
-        builder <- registry.registerStatefulFlow("testKind-durable-effects-async", flowProps)
+    val resultF = for {
+      builder <- registry.registerStatefulFlow("testKind-durable-effects-async", flowProps)
 
-        (controlF, resF) = Source(inputs)
-          .viaMat(builder.flow("1"))(Keep.right)
-          .toMat(Sink.seq)(Keep.both)
-          .run()
+      (controlF, resF) = Source(inputs)
+        .viaMat(builder.flow("1"))(Keep.right)
+        .toMat(Sink.seq)(Keep.both)
+        .run()
 
-        _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
-        _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
 
-        res <- resF
-        control <- controlF
+      res <- resF
+      control <- controlF
 
-        _ = commandSideEffectsProbe.expectNoMessage()
-        counter <- control.commandWithResult(GetCounter(_))
-        _ = commandSideEffectsProbe.expectMsg("before")
-        _ = commandSideEffectsProbe.expectMsg("after")
+      _ = commandSideEffectsProbe.expectNoMessage()
+      counter <- control.commandWithResult(GetCounter(_))
+      _ = commandSideEffectsProbe.expectMsg("before")
+      _ = commandSideEffectsProbe.expectMsg("after")
 
-        _ <- control.terminate()
+      _ <- control.terminate()
 
-        _ = counter shouldBe 10L
-        _ = res.flatten shouldBe 1.to(10).map(i => IncreaseCounterWithTimestamp(i.toLong))
+      _ = counter shouldBe 10L
+      _ = res.flatten shouldBe 1.to(10).map(i => IncreaseCounterWithTimestamp(i.toLong))
 
-        // Since there is no testkit for durable state, we need to check that the stet is correctly persisted
-        // by running a second stream and checking that at the end the state and the produced outputs are
-        // consistent with the state persisted in the first run
+      // Since there is no testkit for durable state, we need to check that the stet is correctly persisted
+      // by running a second stream and checking that at the end the state and the produced outputs are
+      // consistent with the state persisted in the first run
 
-        // First lets verify that the persistent actor has been completely deregistered and thus
-        // will be recreated by reading the state store on the next run
-        controlMissing <- builder.control("1")
-        _ = controlMissing shouldBe None
+      // First lets verify that the persistent actor has been completely deregistered and thus
+      // will be recreated by reading the state store on the next run
+      controlMissing <- builder.control("1")
+      _ = controlMissing shouldBe None
 
-        inputs1 = 1.to(20).map(i => TestInput(i.toLong, 1))
+      inputs1 = 1.to(20).map(i => TestInput(i.toLong, 1))
 
-        (control1F, res1F) = Source(inputs1)
-          .viaMat(builder.flow("1"))(Keep.right)
-          .toMat(Sink.seq)(Keep.both)
-          .run()
+      (control1F, res1F) = Source(inputs1)
+        .viaMat(builder.flow("1"))(Keep.right)
+        .toMat(Sink.seq)(Keep.both)
+        .run()
 
-        res1 <- res1F
-        control1 <- control1F
+      res1 <- res1F
+      control1 <- control1F
 
-        counter1 <- control1.commandWithResult(GetCounter(_))
-        _ <- control1.terminate()
+      counter1 <- control1.commandWithResult(GetCounter(_))
+      _ <- control1.terminate()
 
-        _ = counter1 shouldBe 20L
-        _ = res1.flatten shouldBe 11.to(20).map(i => IncreaseCounterWithTimestamp(i.toLong))
-      } yield ()
+      _ = counter1 shouldBe 20L
+      _ = res1.flatten shouldBe 11.to(20).map(i => IncreaseCounterWithTimestamp(i.toLong))
+    } yield ()
 
-      resultF.futureValue
+    resultF.futureValue
 
-    }
+  }
 }
