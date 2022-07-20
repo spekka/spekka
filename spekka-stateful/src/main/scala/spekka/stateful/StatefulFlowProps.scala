@@ -47,9 +47,36 @@ private[spekka] object StatefulFlowProps {
       backend.behaviorFor(logic, entityKind, entityId)
   }
 
+  class EventBasedAsync[State, Ev, In, Command, BackendProtocol](
+      logic: StatefulFlowLogic.EventBasedAsync[State, Ev, In, Command],
+      val backend: StatefulFlowBackend.EventBasedAsync[State, Ev, BackendProtocol])
+      extends StatefulFlowProps[In, Ev, Command] {
+
+    type BP = BackendProtocol
+
+    override def behaviorFor(
+        entityKind: String,
+        entityId: String
+      ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, BackendProtocol]] =
+      backend.behaviorFor(logic, entityKind, entityId)
+  }
+
   class DurableState[State, In, Out, Command, BackendProtocol](
       logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
       val backend: StatefulFlowBackend.DurableState[State, BackendProtocol])
+      extends StatefulFlowProps[In, Out, Command] {
+
+    type BP = BackendProtocol
+    override def behaviorFor(
+        entityKind: String,
+        entityId: String
+      ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, BackendProtocol]] =
+      backend.behaviorFor(logic, entityKind, entityId)
+  }
+
+  class DurableStateAsync[State, In, Out, Command, BackendProtocol](
+      logic: StatefulFlowLogic.DurableStateAsync[State, In, Out, Command],
+      val backend: StatefulFlowBackend.DurableStateAsync[State, BackendProtocol])
       extends StatefulFlowProps[In, Out, Command] {
 
     type BP = BackendProtocol

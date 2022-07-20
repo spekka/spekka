@@ -20,12 +20,14 @@ import akka.actor.ExtendedActorSystem
 import akka.actor.typed.ActorRef
 import akka.actor.typed.ActorRefResolver
 import akka.actor.typed.ActorSystem
+import akka.actor.{ActorSystem => ClassicActorSystem}
 import akka.pattern.StatusReply
 import akka.serialization.Serializer
 import akka.serialization.SerializerWithStringManifest
 
 import scala.collection.immutable
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 
 case class TestState(lastTimestamp: Long, counter: Long)
 
@@ -143,6 +145,44 @@ object EventBasedTestLogic {
     )
 }
 
+object EventBasedTestLogicAsync {
+  def apply(
+      initState: TestState,
+      processingDelay: FiniteDuration,
+      inputBeforeSideEffectsF: (TestState, TestInput) => immutable.Iterable[() => Future[_]] =
+        (_, _) => Nil,
+      inputAfterSideEffectsF: (TestState, TestInput) => immutable.Iterable[() => Future[_]] =
+        (_, _) => Nil,
+      commandBeforeSideEffectsF: (TestState, TestCommand) => immutable.Iterable[() => Future[_]] =
+        (_, _) => Nil,
+      commandAfterSideEffectsF: (TestState, TestCommand) => immutable.Iterable[() => Future[_]] =
+        (_, _) => Nil
+    )(implicit system: ClassicActorSystem
+    ) =
+    StatefulFlowLogic.EventBasedAsync(
+      () => initState,
+      (state: TestState, in: TestInput) =>
+        akka.pattern.after(processingDelay)(
+          Future.successful(
+            EventBasedTestLogic
+              .processInput(state, in, inputBeforeSideEffectsF, inputAfterSideEffectsF)
+          )
+        ),
+      (state: TestState, event: TestEvent) => EventBasedTestLogic.updateState(state, event),
+      (state: TestState, command: TestCommand) =>
+        akka.pattern.after(processingDelay)(
+          Future.successful(
+            EventBasedTestLogic.processCommand(
+              state,
+              command,
+              commandBeforeSideEffectsF,
+              commandAfterSideEffectsF
+            )
+          )
+        )
+    )
+}
+
 object DurableStateTestLogic {
   import StatefulFlowLogic.DurableState.ProcessingResult
   def processInput(
@@ -193,5 +233,38 @@ object DurableStateTestLogic {
         processInput(state, in, inputBeforeSideEffectsF, inputAfterSideEffectsF),
       (state: TestState, command: TestCommand) =>
         processCommand(state, command, commandBeforeSideEffectsF, commandAfterSideEffectsF)
+    )
+}
+
+object DurableStateTestLogicAsync {
+  def apply(
+      initState: TestState,
+      processingDelay: FiniteDuration,
+      inputBeforeSideEffectsF: (TestState, TestInput) => immutable.Iterable[() => Future[_]] =
+        (_, _) => Nil,
+      inputAfterSideEffectsF: (TestState, TestInput) => immutable.Iterable[() => Future[_]] =
+        (_, _) => Nil,
+      commandBeforeSideEffectsF: (TestState, TestCommand) => immutable.Iterable[() => Future[_]] =
+        (_, _) => Nil,
+      commandAfterSideEffectsF: (TestState, TestCommand) => immutable.Iterable[() => Future[_]] =
+        (_, _) => Nil
+    )(implicit system: ClassicActorSystem
+    ) =
+    StatefulFlowLogic.DurableStateAsync(
+      () => initState,
+      (state: TestState, in: TestInput) =>
+        akka.pattern.after(processingDelay)(
+          Future.successful(
+            DurableStateTestLogic
+              .processInput(state, in, inputBeforeSideEffectsF, inputAfterSideEffectsF)
+          )
+        ),
+      (state: TestState, command: TestCommand) =>
+        akka.pattern.after(processingDelay)(
+          Future.successful(
+            DurableStateTestLogic
+              .processCommand(state, command, commandBeforeSideEffectsF, commandAfterSideEffectsF)
+          )
+        )
     )
 }

@@ -87,6 +87,32 @@ object StatefulFlowBackend {
       new StatefulFlowProps.EventBased[State, Ev, In, Command, BackendProtocol](logic, this)
   }
 
+  trait EventBasedAsync[State, Ev, BackendProtocol] extends StatefulFlowBackend {
+
+    /** The logic type compatible with this backend
+      */
+    type Logic[In, Command] = StatefulFlowLogic.EventBasedAsync[State, Ev, In, Command]
+
+    private[spekka] def behaviorFor[In, Command](
+        logic: StatefulFlowLogic.EventBasedAsync[State, Ev, In, Command],
+        entityKind: String,
+        entityId: String
+      ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, BackendProtocol]]
+
+    /** Creates a [[StatefulFlowProps]] for this backend with the specified logic.
+      *
+      * @param logic
+      *   An [[StatefulFlowLogic.EventBased]] logic to use together with this backend to create a
+      *   stateful flow
+      * @return
+      *   [[StatefulFlowProps]] for this backend and the specified logic
+      */
+    def propsForLogic[In, Command](
+        logic: Logic[In, Command]
+      ): StatefulFlowProps[In, Ev, Command] =
+      new StatefulFlowProps.EventBasedAsync[State, Ev, In, Command, BackendProtocol](logic, this)
+  }
+
   /** A [[StatefulFlowBackend]] for [[StatefulFlowLogic.DurableState]] logics.
     *
     * @tparam State
@@ -118,6 +144,32 @@ object StatefulFlowBackend {
         logic: Logic[In, Out, Command]
       ): StatefulFlowProps[In, Out, Command] =
       new StatefulFlowProps.DurableState[State, In, Out, Command, BackendProtocol](logic, this)
+  }
+
+  trait DurableStateAsync[State, BackendProtocol] extends StatefulFlowBackend {
+
+    /** The logic type compatible with this backend
+      */
+    type Logic[In, Out, Command] = StatefulFlowLogic.DurableStateAsync[State, In, Out, Command]
+
+    private[spekka] def behaviorFor[In, Out, Command](
+        logic: StatefulFlowLogic.DurableStateAsync[State, In, Out, Command],
+        entityKind: String,
+        entityId: String
+      ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, BackendProtocol]]
+
+    /** Creates a [[StatefulFlowProps]] for this backend with the specified logic.
+      *
+      * @param logic
+      *   An [[StatefulFlowLogic.EventBased]] logic to use together with this backend to create a
+      *   stateful flow
+      * @return
+      *   [[StatefulFlowProps]] for this backend and the specified logic
+      */
+    def propsForLogic[In, Out, Command](
+        logic: Logic[In, Out, Command]
+      ): StatefulFlowProps[In, Out, Command] =
+      new StatefulFlowProps.DurableStateAsync[State, In, Out, Command, BackendProtocol](logic, this)
   }
 
   private[spekka] object SideEffectHandlingBehavior {
