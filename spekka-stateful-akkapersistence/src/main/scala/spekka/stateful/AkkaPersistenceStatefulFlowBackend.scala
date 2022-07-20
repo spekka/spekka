@@ -679,11 +679,11 @@ object AkkaPersistenceStatefulFlowBackend {
 
                     Try(logic.processInput(state.innerState, flowInput.in)) match {
                       case Success(resultF) =>
-                        resultF.andThen(res =>
+                        resultF.andThen { case res =>
                           self.tell(
                             EventBased.InputProcessingResultReady(res, flowInput.replyTo)
                           )
-                        )
+                        }
                         Effect.none
                       case Failure(ex) =>
                         actorContext.log.error("Failure handling input", ex)
@@ -727,11 +727,11 @@ object AkkaPersistenceStatefulFlowBackend {
 
                     Try(logic.processCommand(state.innerState, commandRequest.command)) match {
                       case Success(resultF) =>
-                        resultF.andThen(res =>
+                        resultF.andThen { case res =>
                           self.tell(
                             EventBased.CommandProcessingResultReady(res)
                           )
-                        )
+                        }
                         Effect.none
                       case Failure(ex) =>
                         actorContext.log.error("Failure handling command", ex)
@@ -1410,11 +1410,11 @@ object AkkaPersistenceStatefulFlowBackend {
 
                   Try(logic.processInput(state.innerState, flowInput.in)) match {
                     case Success(resultF) =>
-                      resultF.andThen(res =>
+                      resultF.andThen { case res =>
                         self.tell(
                           DurableState.InputProcessingResultReady(res, flowInput.replyTo)
                         )
-                      )
+                      }
                       Effect.none
 
                     case Failure(ex) =>
@@ -1459,11 +1459,11 @@ object AkkaPersistenceStatefulFlowBackend {
 
                   Try(logic.processCommand(state.innerState, commandRequest.command)) match {
                     case Success(resultF) =>
-                      resultF.andThen(res =>
+                      resultF.andThen { case res =>
                         self.tell(
                           DurableState.CommandProcessingResultReady(res)
                         )
-                      )
+                      }
                       Effect.none
 
                     case Failure(ex) =>

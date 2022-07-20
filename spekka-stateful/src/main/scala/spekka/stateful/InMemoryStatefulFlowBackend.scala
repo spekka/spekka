@@ -202,11 +202,11 @@ object InMemoryStatefulFlowBackend {
               val self = ctx.self
               logic
                 .processInput(state, in)
-                .andThen(res =>
+                .andThen { case res =>
                   self.tell(
                     InMemoryBackendAsyncProtocol.InputProcessingResultReady(res, replyTo)
                   )
-                )
+                }
               Behaviors.same
 
             case InMemoryBackendAsyncProtocol.InputProcessingResultReady(
@@ -250,9 +250,9 @@ object InMemoryStatefulFlowBackend {
               val self = ctx.self
               logic
                 .processCommand(state, command)
-                .andThen(res =>
+                .andThen { case res =>
                   self.tell(InMemoryBackendAsyncProtocol.CommandProcessingResultReady(res))
-                )
+                }
               Behaviors.same
 
             case InMemoryBackendAsyncProtocol.CommandProcessingResultReady(
@@ -424,11 +424,11 @@ object InMemoryStatefulFlowBackend {
               val self = ctx.self
               logic
                 .processInput(state, in)
-                .andThen(res =>
+                .andThen { case res =>
                   self.tell(
                     InMemoryBackendAsyncProtocol.InputProcessingResultReady(res, replyTo)
                   )
-                )
+                }
               Behaviors.same
 
             case InMemoryBackendAsyncProtocol.InputProcessingResultReady(
@@ -470,9 +470,9 @@ object InMemoryStatefulFlowBackend {
               val self = ctx.self
               logic
                 .processCommand(state, command)
-                .andThen(res =>
+                .andThen { case res =>
                   self.tell(InMemoryBackendAsyncProtocol.CommandProcessingResultReady(res))
-                )
+                }
               Behaviors.same
 
             case InMemoryBackendAsyncProtocol.CommandProcessingResultReady(
