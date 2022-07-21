@@ -233,12 +233,12 @@ object StatefulFlowRegistry {
 
   final private[spekka] class StatefulFlowLazyControlImpl[Command](
       control: StatefulFlowLazyMultiControlImpl[Command],
-      entityId: String
-    ) extends StatefulFlowLazyEntityControl[Command] {
+      entityId: String)
+      extends StatefulFlowLazyEntityControl[Command] {
     override def command(command: Command): Future[Unit] = control.command(entityId, command)
-    
 
-    override def commandOption(command: Command): Future[Boolean] = control.commandOption(entityId, command)
+    override def commandOption(command: Command): Future[Boolean] =
+      control.commandOption(entityId, command)
 
     override def commandWithResult[Result](
         f: ActorRef[StatusReply[Result]] => Command
@@ -358,10 +358,13 @@ object StatefulFlowRegistry {
     def control(entityId: String): Future[Option[StatefulFlowControl[Command]]] =
       registry.makeControl(this, entityId)
 
-    def lazyControl(implicit ec: ExecutionContext): StatefulFlowLazyControl[Command] = 
+    def lazyControl(implicit ec: ExecutionContext): StatefulFlowLazyControl[Command] =
       new StatefulFlowLazyMultiControlImpl(this)
 
-    def lazyEntityControl(entityId: String)(implicit ec: ExecutionContext): StatefulFlowLazyEntityControl[Command] = 
+    def lazyEntityControl(
+        entityId: String
+      )(implicit ec: ExecutionContext
+      ): StatefulFlowLazyEntityControl[Command] =
       new StatefulFlowLazyMultiControlImpl(this).narrow(entityId)
   }
 

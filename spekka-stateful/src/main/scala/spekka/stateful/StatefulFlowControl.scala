@@ -182,7 +182,6 @@ trait StatefulFlowLazyControl[Command] {
     * In case there is no currently materialized statful flow for the backing entity, the future
     * will fail with a [[StatefulFlowNotMaterialized]] exception.
     *
-    * 
     * @param entityId
     *   the entity to issue to command to
     * @param command
@@ -270,12 +269,12 @@ trait StatefulFlowLazyControl[Command] {
       f: ActorRef[StatusReply[Result]] => Command
     ): Future[Option[Result]]
 
-
-  /**
-    * Narrows this control interface to work only on the specified entity.
+  /** Narrows this control interface to work only on the specified entity.
     *
-    * @param entityId The entity to narrow the control to
-    * @return An instance of [[StatefulFlowLazyEntityControl]] for the specified entity
+    * @param entityId
+    *   The entity to narrow the control to
+    * @return
+    *   An instance of [[StatefulFlowLazyEntityControl]] for the specified entity
     */
   def narrow(entityId: String): StatefulFlowLazyEntityControl[Command]
 }
