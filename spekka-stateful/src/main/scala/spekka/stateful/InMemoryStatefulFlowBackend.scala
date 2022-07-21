@@ -21,6 +21,7 @@ import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import akka.pattern.StatusReply
 
+import scala.concurrent.ExecutionContext
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -191,6 +192,122 @@ object InMemoryStatefulFlowBackend {
         stashBufferSize: Int
       ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]] = {
 
+      def handleInput(
+          state: State,
+          result: StatefulFlowLogic.EventBased.ProcessingResult[Ev],
+          self: ActorRef[
+            StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]
+          ],
+          replyTo: ActorRef[StatusReply[StatefulFlowHandler.ProcessFlowOutput[Any]]]
+        )(implicit ec: ExecutionContext
+        ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]] = {
+        val updatedState =
+          result.events.foldLeft(state)((s, ev) => logic.updateState(s, ev))
+
+        StatefulFlowBackend.SideEffectHandlingBehavior(
+          self,
+          result.beforeUpdateSideEffects,
+          ex => {
+            replyTo ! StatusReply.error(ex)
+            behavior(state)
+          },
+          result.afterUpdateSideEffects,
+          ex => {
+            replyTo ! StatusReply.error(ex)
+            behavior(updatedState)
+          },
+          () => {
+            replyTo ! StatusReply.success(
+              StatefulFlowHandler.ProcessFlowOutput(result.events)
+            )
+            behavior(updatedState)
+          },
+          stashBufferSize
+        )(ec, sideEffectHandlingBehaviorAsyncProtocolAdapter)
+      }
+
+      def inputProcessingWaitBehavior(
+          state: State
+        ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]] = {
+        Behaviors.withStash(stashBufferSize) { stash =>
+          Behaviors.receive { (ctx, msg) =>
+            implicit val ec = ctx.executionContext
+
+            msg match {
+              case InMemoryBackendAsyncProtocol.InputProcessingResultReady(
+                    resultE: Try[
+                      StatefulFlowLogic.EventBased.ProcessingResult[Ev]
+                    ] @unchecked,
+                    replyTo
+                  ) =>
+                resultE match {
+                  case Success(result) =>
+                    stash.unstashAll(handleInput(state, result, ctx.self, replyTo))
+
+                  case Failure(ex) =>
+                    replyTo ! StatusReply.error(ex)
+                    stash.unstashAll(behavior(state))
+                }
+
+              case msg =>
+                stash.stash(msg)
+                Behaviors.same
+            }
+          }
+        }
+      }
+
+      def handleCommand(
+          state: State,
+          result: StatefulFlowLogic.EventBased.ProcessingResult[Ev],
+          self: ActorRef[
+            StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]
+          ]
+        )(implicit ec: ExecutionContext
+        ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]] = {
+        val updatedState =
+          result.events.foldLeft(state)((s, ev) => logic.updateState(s, ev))
+
+        StatefulFlowBackend.SideEffectHandlingBehavior(
+          self,
+          result.beforeUpdateSideEffects,
+          _ => behavior(state),
+          result.afterUpdateSideEffects,
+          _ => behavior(updatedState),
+          () => behavior(updatedState),
+          stashBufferSize
+        )(ec, sideEffectHandlingBehaviorAsyncProtocolAdapter)
+      }
+
+      def commandProcessingWaitBehavior(
+          state: State
+        ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]] = {
+        Behaviors.withStash(stashBufferSize) { stash =>
+          Behaviors.receive { (ctx, msg) =>
+            implicit val ec = ctx.executionContext
+
+            msg match {
+              case InMemoryBackendAsyncProtocol.CommandProcessingResultReady(
+                    resultE: Try[
+                      StatefulFlowLogic.EventBased.ProcessingResult[Ev]
+                    ] @unchecked
+                  ) =>
+                resultE match {
+                  case Success(result) =>
+                    stash.unstashAll(handleCommand(state, result, ctx.self))
+
+                  case Failure(_) =>
+                    stash.unstashAll(behavior(state))
+                }
+
+              case msg =>
+                stash.stash(msg)
+                Behaviors.same
+            }
+          }
+        }
+      }
+
       def behavior(
           state: State
         ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]] = {
@@ -200,81 +317,40 @@ object InMemoryStatefulFlowBackend {
           msg match {
             case StatefulFlowHandler.ProcessFlowInput(in, replyTo) =>
               val self = ctx.self
-              logic
-                .processInput(state, in)
-                .andThen { case res =>
-                  self.tell(
-                    InMemoryBackendAsyncProtocol.InputProcessingResultReady(res, replyTo)
-                  )
-                }
-              Behaviors.same
+              val resultF = logic.processInput(state, in)
+              resultF.value match {
+                case Some(Success(result)) =>
+                  handleInput(state, result, ctx.self, replyTo)
 
-            case InMemoryBackendAsyncProtocol.InputProcessingResultReady(
-                  resultE: Try[
-                    StatefulFlowLogic.EventBased.ProcessingResult[Ev]
-                  ] @unchecked,
-                  replyTo
-                ) =>
-              resultE match {
-                case Success(result) =>
-                  val updatedState =
-                    result.events.foldLeft(state)((s, ev) => logic.updateState(s, ev))
-
-                  StatefulFlowBackend.SideEffectHandlingBehavior(
-                    ctx.self,
-                    result.beforeUpdateSideEffects,
-                    ex => {
-                      replyTo ! StatusReply.error(ex)
-                      behavior(state)
-                    },
-                    result.afterUpdateSideEffects,
-                    ex => {
-                      replyTo ! StatusReply.error(ex)
-                      behavior(updatedState)
-                    },
-                    () => {
-                      replyTo ! StatusReply.success(
-                        StatefulFlowHandler.ProcessFlowOutput(result.events)
-                      )
-                      behavior(updatedState)
-                    },
-                    stashBufferSize
-                  )(ctx.executionContext, sideEffectHandlingBehaviorAsyncProtocolAdapter)
-
-                case Failure(ex) =>
+                case Some(Failure(ex)) =>
                   replyTo ! StatusReply.error(ex)
                   Behaviors.same
+
+                case None =>
+                  resultF.andThen { case res =>
+                    self.tell(
+                      InMemoryBackendAsyncProtocol.InputProcessingResultReady(res, replyTo)
+                    )
+                  }
+                  inputProcessingWaitBehavior(state)
               }
 
             case StatefulFlowHandler.ProcessCommand(command) =>
               val self = ctx.self
-              logic
-                .processCommand(state, command)
-                .andThen { case res =>
-                  self.tell(InMemoryBackendAsyncProtocol.CommandProcessingResultReady(res))
-                }
-              Behaviors.same
+              val resultF = logic.processCommand(state, command)
 
-            case InMemoryBackendAsyncProtocol.CommandProcessingResultReady(
-                  resultE: Try[StatefulFlowLogic.EventBased.ProcessingResult[Ev]] @unchecked
-                ) =>
-              resultE match {
-                case Success(result) =>
-                  val updatedState =
-                    result.events.foldLeft(state)((s, ev) => logic.updateState(s, ev))
+              resultF.value match {
+                case Some(Success(result)) =>
+                  handleCommand(state, result, ctx.self)
 
-                  StatefulFlowBackend.SideEffectHandlingBehavior(
-                    ctx.self,
-                    result.beforeUpdateSideEffects,
-                    _ => behavior(state),
-                    result.afterUpdateSideEffects,
-                    _ => behavior(updatedState),
-                    () => behavior(updatedState),
-                    stashBufferSize
-                  )(ctx.executionContext, sideEffectHandlingBehaviorAsyncProtocolAdapter)
-
-                case Failure(_) =>
+                case Some(Failure(_)) =>
                   Behaviors.same
+
+                case None =>
+                  resultF.andThen { case res =>
+                    self.tell(InMemoryBackendAsyncProtocol.CommandProcessingResultReady(res))
+                  }
+                  commandProcessingWaitBehavior(state)
               }
 
             case StatefulFlowHandler.TerminateRequest(replyTo) =>
@@ -413,6 +489,120 @@ object InMemoryStatefulFlowBackend {
         stashBufferSize: Int
       ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendAsyncProtocol]] = {
 
+      def handleInput(
+          state: State,
+          result: StatefulFlowLogic.DurableState.ProcessingResult[State, Out],
+          self: ActorRef[
+            StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendAsyncProtocol]
+          ],
+          replyTo: ActorRef[StatusReply[StatefulFlowHandler.ProcessFlowOutput[Any]]]
+        )(implicit ec: ExecutionContext
+        ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendAsyncProtocol]] = {
+        val updatedState = result.state
+
+        StatefulFlowBackend.SideEffectHandlingBehavior(
+          self,
+          result.beforeUpdateSideEffects,
+          ex => {
+            replyTo ! StatusReply.error(ex)
+            behavior(state)
+          },
+          result.afterUpdateSideEffects,
+          ex => {
+            replyTo ! StatusReply.error(ex)
+            behavior(updatedState)
+          },
+          () => {
+            replyTo ! StatusReply.success(
+              StatefulFlowHandler.ProcessFlowOutput(result.outs)
+            )
+            behavior(updatedState)
+          },
+          stashBufferSize
+        )(ec, sideEffectHandlingBehaviorAsyncProtocolAdapter)
+      }
+
+      def inputProcessingWaitBehavior(
+          state: State
+        ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendAsyncProtocol]] = {
+        Behaviors.withStash(stashBufferSize) { stash =>
+          Behaviors.receive { (ctx, msg) =>
+            implicit val ec = ctx.executionContext
+
+            msg match {
+              case InMemoryBackendAsyncProtocol.InputProcessingResultReady(
+                    resultE: Try[
+                      StatefulFlowLogic.DurableState.ProcessingResult[State, Out]
+                    ] @unchecked,
+                    replyTo
+                  ) =>
+                resultE match {
+                  case Success(result) =>
+                    handleInput(state, result, ctx.self, replyTo)
+
+                  case Failure(ex) =>
+                    replyTo ! StatusReply.error(ex)
+                    Behaviors.same
+                }
+
+              case msg =>
+                stash.stash(msg)
+                Behaviors.same
+            }
+          }
+        }
+      }
+
+      def handleCommand(
+          state: State,
+          result: StatefulFlowLogic.DurableState.ProcessingResult[State, Nothing],
+          self: ActorRef[
+            StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendAsyncProtocol]
+          ]
+        )(implicit ec: ExecutionContext
+        ) = {
+        val updatedState = result.state
+
+        StatefulFlowBackend.SideEffectHandlingBehavior(
+          self,
+          result.beforeUpdateSideEffects,
+          _ => behavior(state),
+          result.afterUpdateSideEffects,
+          _ => behavior(updatedState),
+          () => behavior(updatedState),
+          stashBufferSize
+        )(ec, sideEffectHandlingBehaviorAsyncProtocolAdapter)
+      }
+
+      def commandProcessingWaitBehavior(
+          state: State
+        ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendAsyncProtocol]] = {
+        Behaviors.withStash(stashBufferSize) { stash =>
+          Behaviors.receive { (ctx, msg) =>
+            implicit val ec = ctx.executionContext
+
+            msg match {
+              case InMemoryBackendAsyncProtocol.CommandProcessingResultReady(
+                    resultE: Try[
+                      StatefulFlowLogic.DurableState.ProcessingResult[State, Nothing]
+                    ] @unchecked
+                  ) =>
+                resultE match {
+                  case Success(result) =>
+                    handleCommand(state, result, ctx.self)
+
+                  case Failure(_) =>
+                    Behaviors.same
+                }
+
+              case msg =>
+                stash.stash(msg)
+                Behaviors.same
+            }
+          }
+        }
+      }
+
       def behavior(
           state: State
         ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendAsyncProtocol]] = {
@@ -422,79 +612,40 @@ object InMemoryStatefulFlowBackend {
           msg match {
             case StatefulFlowHandler.ProcessFlowInput(in, replyTo) =>
               val self = ctx.self
-              logic
-                .processInput(state, in)
-                .andThen { case res =>
-                  self.tell(
-                    InMemoryBackendAsyncProtocol.InputProcessingResultReady(res, replyTo)
-                  )
-                }
-              Behaviors.same
+              val resultF = logic.processInput(state, in)
 
-            case InMemoryBackendAsyncProtocol.InputProcessingResultReady(
-                  resultE: Try[
-                    StatefulFlowLogic.DurableState.ProcessingResult[State, Out]
-                  ] @unchecked,
-                  replyTo
-                ) =>
-              resultE match {
-                case Success(result) =>
-                  val updatedState = result.state
+              resultF.value match {
+                case Some(Success(result)) =>
+                  handleInput(state, result, ctx.self, replyTo)
 
-                  StatefulFlowBackend.SideEffectHandlingBehavior(
-                    ctx.self,
-                    result.beforeUpdateSideEffects,
-                    ex => {
-                      replyTo ! StatusReply.error(ex)
-                      behavior(state)
-                    },
-                    result.afterUpdateSideEffects,
-                    ex => {
-                      replyTo ! StatusReply.error(ex)
-                      behavior(updatedState)
-                    },
-                    () => {
-                      replyTo ! StatusReply.success(
-                        StatefulFlowHandler.ProcessFlowOutput(result.outs)
-                      )
-                      behavior(updatedState)
-                    },
-                    stashBufferSize
-                  )(ctx.executionContext, sideEffectHandlingBehaviorAsyncProtocolAdapter)
-                case Failure(ex) =>
+                case Some(Failure(ex)) =>
                   replyTo ! StatusReply.error(ex)
                   Behaviors.same
+
+                case None =>
+                  resultF.andThen { case res =>
+                    self.tell(
+                      InMemoryBackendAsyncProtocol.InputProcessingResultReady(res, replyTo)
+                    )
+                  }
+                  inputProcessingWaitBehavior(state)
               }
 
             case StatefulFlowHandler.ProcessCommand(command) =>
               val self = ctx.self
-              logic
-                .processCommand(state, command)
-                .andThen { case res =>
-                  self.tell(InMemoryBackendAsyncProtocol.CommandProcessingResultReady(res))
-                }
-              Behaviors.same
+              val resultF = logic.processCommand(state, command)
+              resultF.value match {
+                case Some(Success(result)) =>
+                  handleCommand(state, result, ctx.self)
 
-            case InMemoryBackendAsyncProtocol.CommandProcessingResultReady(
-                  resultE: Try[
-                    StatefulFlowLogic.DurableState.ProcessingResult[State, Out]
-                  ] @unchecked
-                ) =>
-              resultE match {
-                case Success(result) =>
-                  val updatedState = result.state
-
-                  StatefulFlowBackend.SideEffectHandlingBehavior(
-                    ctx.self,
-                    result.beforeUpdateSideEffects,
-                    _ => behavior(state),
-                    result.afterUpdateSideEffects,
-                    _ => behavior(updatedState),
-                    () => behavior(updatedState),
-                    stashBufferSize
-                  )(ctx.executionContext, sideEffectHandlingBehaviorAsyncProtocolAdapter)
-                case Failure(_) =>
+                case Some(Failure(_)) =>
                   Behaviors.same
+
+                case None =>
+                  resultF.andThen { case res =>
+                    self.tell(InMemoryBackendAsyncProtocol.CommandProcessingResultReady(res))
+                  }
+                  commandProcessingWaitBehavior(state)
               }
 
             case StatefulFlowHandler.TerminateRequest(replyTo) =>

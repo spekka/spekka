@@ -18,6 +18,7 @@ package spekka.stateful
 
 import akka.actor.typed.ActorRef
 import akka.actor.typed.Behavior
+import akka.actor.typed.scaladsl.ActorContext
 import akka.actor.typed.scaladsl.Behaviors
 import akka.pattern.StatusReply
 import akka.persistence.typed.EventAdapter
@@ -28,6 +29,7 @@ import akka.persistence.typed.scaladsl.EventSourcedBehavior
 import akka.persistence.typed.scaladsl.RetentionCriteria
 import akka.persistence.typed.state.scaladsl.DurableStateBehavior
 import akka.serialization.SerializerWithStringManifest
+import org.slf4j.Logger
 import spekka.codec.Codec
 
 import scala.concurrent.ExecutionContext
@@ -251,22 +253,275 @@ object AkkaPersistenceStatefulFlowBackend {
             )
         }
       } else {
+        state.waitingForProcessingCompletion = false
         Effect
           .persist(result.events)
           .thenRun((_: StateWrapper[State]) => successAction())
       }
     }
 
-    private[spekka] def behaviorFactory[State, Ev, In, Command](
+    private[spekka] def handleBeforeSideEffect[State, Ev, In, Command](
+        result: StatefulFlowLogic.EventBased.ProcessingResult[Ev @unchecked],
+        successAction: () => Unit,
+        failureAction: (Throwable) => Unit,
+        self: ActorRef[
+          StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      )(implicit ec: ExecutionContext
+      ): Effect[Ev, StateWrapper[State]] = {
+      if (result.afterUpdateSideEffects.nonEmpty) {
+        Effect
+          .persist(result.events)
+          .thenRun { _: StateWrapper[State] =>
+            SideEffectRunner
+              .run(result.afterUpdateSideEffects, sideEffectsParallelism)
+              .onComplete {
+                case Success(_) =>
+                  self ! AfterSideEffectCompleted(successAction)
+                case Failure(ex) =>
+                  self ! SideEffectFailure(ex, failureAction)
+              }
+          }
+      } else {
+        Effect
+          .persist(result.events)
+          .thenRun((s: StateWrapper[State]) => s.waitingForProcessingCompletion = false)
+          .thenRun(_ => successAction())
+          .thenUnstashAll()
+      }
+    }
+
+    private[spekka] def handleAfterSideEffect[State](
+        state: StateWrapper[State],
+        successAction: () => Unit
+      ): Effect[Nothing, StateWrapper[State]] = {
+      state.waitingForProcessingCompletion = false
+      successAction()
+      Effect.unstashAll[Nothing, StateWrapper[State]]()
+    }
+
+    private[spekka] def handleSideEffectFailure[State](
+        state: StateWrapper[State],
+        failureAction: (Throwable) => Unit,
+        ex: Throwable,
+        log: Logger
+      ): EffectBuilder[Nothing, StateWrapper[State]] = {
+      state.waitingForProcessingCompletion = false
+      log.error("Failure handling processing side effects", ex)
+      failureAction(ex)
+      Effect.none[Nothing, StateWrapper[State]]
+    }
+
+    private[spekka] def handleInputImpl[State, Ev, In, Command](
+        state: StateWrapper[State],
+        result: Try[StatefulFlowLogic.EventBased.ProcessingResult[Ev]],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+        ],
+        replyTo: ActorRef[
+          StatusReply[StatefulFlowHandler.ProcessFlowOutput[Ev]]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[Ev, StateWrapper[State]] = {
+      result match {
+        case Success(result) =>
+          val successAction = () =>
+            replyTo ! StatusReply.success(
+              StatefulFlowHandler.ProcessFlowOutput(result.events)
+            )
+          val failureAction =
+            (ex: Throwable) => replyTo ! StatusReply.error(ex)
+
+          handleResult(
+            actorContext.self,
+            state,
+            result,
+            successAction,
+            failureAction,
+            sideEffectsParallelism
+          )(actorContext.executionContext)
+        case Failure(ex) =>
+          actorContext.log.error("Failure handling input", ex)
+          Effect.reply(replyTo)(StatusReply.error(ex))
+
+      }
+    }
+
+    private[spekka] def handleInputSync[State, Ev, In, Command](
+        state: StateWrapper[State],
+        flowInput: StatefulFlowHandler.ProcessFlowInput[In, Ev],
+        logic: StatefulFlowLogic.EventBased[State, Ev, In, Command],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[Ev, StateWrapper[State]] = {
+      if (!state.waitingForProcessingCompletion) {
+        val result = Try(logic.processInput(state.innerState, flowInput.in))
+        handleInputImpl(state, result, actorContext, flowInput.replyTo, sideEffectsParallelism)
+      } else Effect.stash()
+    }
+
+    private[spekka] def handleInputAsync[State, Ev, In, Command](
+        state: StateWrapper[State],
+        flowInput: StatefulFlowHandler.ProcessFlowInput[In, Ev],
+        logic: StatefulFlowLogic.EventBasedAsync[State, Ev, In, Command],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[Ev, StateWrapper[State]] = {
+      if (!state.waitingForProcessingCompletion) {
+        Try(logic.processInput(state.innerState, flowInput.in)) match {
+          case Success(resultF) =>
+            resultF.value match {
+              case Some(result) =>
+                handleInputImpl(
+                  state,
+                  result,
+                  actorContext,
+                  flowInput.replyTo,
+                  sideEffectsParallelism
+                )
+
+              case None =>
+                state.waitingForProcessingCompletion = true
+                resultF.andThen { case res =>
+                  actorContext.self.tell(
+                    EventBased.InputProcessingResultReady(res, flowInput.replyTo)
+                  )
+                }(actorContext.executionContext)
+                Effect.none
+            }
+
+          case Failure(ex) =>
+            actorContext.log.error("Failure handling input", ex)
+            Effect.reply(flowInput.replyTo)(StatusReply.error(ex))
+            Effect.none
+        }
+      } else Effect.stash()
+    }
+
+    private[spekka] def handleCommandImpl[State, Ev, In, Command](
+        state: StateWrapper[State],
+        result: Try[StatefulFlowLogic.EventBased.ProcessingResult[Ev]],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[Ev, StateWrapper[State]] = {
+      result match {
+        case Success(result) =>
+          val successAction = () => ()
+          val failureAction = (_: Throwable) => ()
+
+          handleResult(
+            actorContext.self,
+            state,
+            result,
+            successAction,
+            failureAction,
+            sideEffectsParallelism
+          )(actorContext.executionContext)
+
+        case Failure(ex) =>
+          actorContext.log.error("Failure handling command", ex)
+          Effect.none
+      }
+    }
+
+    private[spekka] def handleCommandSync[State, Ev, In, Command](
+        state: StateWrapper[State],
+        commandRequest: StatefulFlowHandler.ProcessCommand[Command],
+        logic: StatefulFlowLogic.EventBased[State, Ev, In, Command],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[Ev, StateWrapper[State]] = {
+      if (!state.waitingForProcessingCompletion) {
+        handleCommandImpl(
+          state,
+          Try(logic.processCommand(state.innerState, commandRequest.command)),
+          actorContext,
+          sideEffectsParallelism
+        )
+      } else Effect.stash()
+    }
+
+    private[spekka] def handleCommandAsync[State, Ev, In, Command](
+        state: StateWrapper[State],
+        commandRequest: StatefulFlowHandler.ProcessCommand[Command],
+        logic: StatefulFlowLogic.EventBasedAsync[State, Ev, In, Command],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[Ev, StateWrapper[State]] = {
+      if (!state.waitingForProcessingCompletion) {
+        Try(logic.processCommand(state.innerState, commandRequest.command)) match {
+          case Success(resultF) =>
+            resultF.value match {
+              case Some(result) =>
+                handleCommandImpl(state, result, actorContext, sideEffectsParallelism)
+
+              case None =>
+                state.waitingForProcessingCompletion = true
+                resultF.andThen { case res =>
+                  actorContext.self.tell(
+                    EventBased.CommandProcessingResultReady(res)
+                  )
+                }(actorContext.executionContext)
+                Effect.none
+            }
+
+          case Failure(ex) =>
+            actorContext.log.error("Failure handling command", ex)
+            Effect.none
+        }
+      } else Effect.stash()
+    }
+
+    private[spekka] def behaviorFactoryProto[State, Ev, In, Command](
         entityKind: String,
         entityId: String,
-        logic: StatefulFlowLogic.EventBased[State, Ev, In, Command],
+        initialState: () => State,
+        updateState: (State, Ev) => State,
         retentionCriteria: RetentionCriteria,
         storagePlugin: PersistencePlugin,
         partitions: Int,
         sideEffectsParallelism: Int,
         eventAdapter: Option[EventAdapter[Ev, _]],
-        snapshotAdapter: Option[SnapshotAdapter[State]]
+        snapshotAdapter: Option[SnapshotAdapter[State]],
+        inputHandler: (
+            StateWrapper[State],
+            StatefulFlowHandler.ProcessFlowInput[In, Ev],
+            ActorContext[
+              StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+            ]
+        ) => Effect[Ev, StateWrapper[State]],
+        inputProcessingReadyHandler: (
+            StateWrapper[State],
+            InputProcessingResultReady[Ev],
+            ActorContext[
+              StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+            ]
+        ) => Effect[Ev, StateWrapper[State]],
+        commandHandler: (
+            StateWrapper[State],
+            StatefulFlowHandler.ProcessCommand[Command],
+            ActorContext[
+              StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+            ]
+        ) => Effect[Ev, StateWrapper[State]],
+        commandProcessingReadyHandler: (
+            StateWrapper[State],
+            CommandProcessingResultReady[Ev],
+            ActorContext[
+              StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+            ]
+        ) => Effect[Ev, StateWrapper[State]]
       ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]] = {
       val partitionId = Math.abs(entityId.hashCode % partitions)
       val partitionTag = Set(s"$entityKind-$partitionId")
@@ -281,7 +536,7 @@ object AkkaPersistenceStatefulFlowBackend {
             StateWrapper[State]
           ](
             PersistenceId(entityKind, entityId),
-            StateWrapper.recoveredState(logic.initialState),
+            StateWrapper.recoveredState(initialState()),
             (state, req) =>
               req match {
                 case BeforeSideEffectCompleted(
@@ -289,85 +544,47 @@ object AkkaPersistenceStatefulFlowBackend {
                       successAction,
                       failureAction
                     ) =>
-                  if (result.afterUpdateSideEffects.nonEmpty) {
-                    Effect
-                      .persist(result.events)
-                      .thenRun { _ =>
-                        SideEffectRunner
-                          .run(result.afterUpdateSideEffects, sideEffectsParallelism)
-                          .onComplete {
-                            case Success(_) =>
-                              actorContext.self ! AfterSideEffectCompleted(successAction)
-                            case Failure(ex) =>
-                              actorContext.self ! SideEffectFailure(ex, failureAction)
-                          }
-                      }
-                  } else {
-                    Effect
-                      .persist(result.events)
-                      .thenRun((s: StateWrapper[State]) => s.waitingForProcessingCompletion = false)
-                      .thenRun(_ => successAction())
-                      .thenUnstashAll()
-                  }
+                  handleBeforeSideEffect(
+                    result,
+                    successAction,
+                    failureAction,
+                    actorContext.self,
+                    sideEffectsParallelism
+                  )
 
                 case AfterSideEffectCompleted(successAction) =>
-                  state.waitingForProcessingCompletion = false
-                  successAction()
-                  Effect.unstashAll()
+                  handleAfterSideEffect(state, successAction)
 
                 case SideEffectFailure(ex, failureAction) =>
-                  state.waitingForProcessingCompletion = false
-                  actorContext.log.error("Failure handling processing side effects", ex)
-                  failureAction(ex)
-                  Effect.none
+                  handleSideEffectFailure(state, failureAction, ex, actorContext.log)
 
                 case flowInput: StatefulFlowHandler.ProcessFlowInput[In, Ev] =>
-                  if (!state.waitingForProcessingCompletion) {
-                    Try(logic.processInput(state.innerState, flowInput.in)) match {
-                      case Success(result) =>
-                        val successAction = () =>
-                          flowInput.replyTo ! StatusReply.success(
-                            StatefulFlowHandler.ProcessFlowOutput(result.events)
-                          )
-                        val failureAction =
-                          (ex: Throwable) => flowInput.replyTo ! StatusReply.error(ex)
+                  inputHandler(
+                    state,
+                    flowInput,
+                    actorContext
+                  )
 
-                        handleResult(
-                          actorContext.self,
-                          state,
-                          result,
-                          successAction,
-                          failureAction,
-                          sideEffectsParallelism
-                        )
-
-                      case Failure(ex) =>
-                        actorContext.log.error("Failure handling input", ex)
-                        Effect.reply(flowInput.replyTo)(StatusReply.error(ex))
-                    }
-                  } else Effect.stash()
+                case msg: InputProcessingResultReady[Ev @unchecked] =>
+                  inputProcessingReadyHandler(
+                    state,
+                    msg,
+                    actorContext
+                  )
 
                 case commandRequest: StatefulFlowHandler.ProcessCommand[Command] =>
-                  if (!state.waitingForProcessingCompletion) {
-                    Try(logic.processCommand(state.innerState, commandRequest.command)) match {
-                      case Success(result) =>
-                        val successAction = () => ()
-                        val failureAction = (_: Throwable) => ()
+                  commandHandler(
+                    state,
+                    commandRequest,
+                    actorContext
+                  )
 
-                        handleResult(
-                          actorContext.self,
-                          state,
-                          result,
-                          successAction,
-                          failureAction,
-                          sideEffectsParallelism
-                        )
-
-                      case Failure(ex) =>
-                        actorContext.log.error("Failure handling command", ex)
-                        Effect.none
-                    }
-                  } else Effect.stash()
+                case msg: CommandProcessingResultReady[Ev @unchecked] =>
+                  commandProcessingReadyHandler(
+                    state,
+                    msg,
+                    actorContext
+                  )
 
                 case StatefulFlowHandler.TerminateRequest(replyTo) =>
                   if (!state.waitingForProcessingCompletion) {
@@ -383,7 +600,7 @@ object AkkaPersistenceStatefulFlowBackend {
                     Effect.stop()
                   } else Effect.stash()
               },
-            (state, event) => state.withInnerState(logic.updateState(state.innerState, event))
+            (state, event) => state.withInnerState(updateState(state.innerState, event))
           ).withRetention(retentionCriteria)
             .withTagger(_ => partitionTag)
             .withJournalPluginId(storagePlugin.journalPluginId)
@@ -410,6 +627,43 @@ object AkkaPersistenceStatefulFlowBackend {
 
         behaviorWithEventAndSnapshotAdapter
       }
+    }
+
+    private[spekka] def behaviorFactory[State, Ev, In, Command](
+        entityKind: String,
+        entityId: String,
+        logic: StatefulFlowLogic.EventBased[State, Ev, In, Command],
+        retentionCriteria: RetentionCriteria,
+        storagePlugin: PersistencePlugin,
+        partitions: Int,
+        sideEffectsParallelism: Int,
+        eventAdapter: Option[EventAdapter[Ev, _]],
+        snapshotAdapter: Option[SnapshotAdapter[State]]
+      ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]] = {
+      behaviorFactoryProto[State, Ev, In, Command](
+        entityKind,
+        entityId,
+        () => logic.initialState,
+        logic.updateState,
+        retentionCriteria,
+        storagePlugin,
+        partitions,
+        sideEffectsParallelism,
+        eventAdapter,
+        snapshotAdapter,
+        (state, input, actorContext) =>
+          handleInputSync(state, input, logic, actorContext, sideEffectsParallelism),
+        (_, _, _) =>
+          throw new IllegalStateException(
+            "Inconsistency in AkkaPersistenceStatefulFlowBackend.EventBased"
+          ),
+        (state, command, actorContext) =>
+          handleCommandSync(state, command, logic, actorContext, sideEffectsParallelism),
+        (_, _, _) =>
+          throw new IllegalStateException(
+            "Inconsistency in AkkaPersistenceStatefulFlowBackend.EventBased"
+          )
+      )
     }
 
     /** Creates a new instance of [[AkkaPersistenceStatefulFlowBackend.EventBased]].
@@ -597,13 +851,16 @@ object AkkaPersistenceStatefulFlowBackend {
       )
   }
 
+  /** An implementation of `StatefulFlowBackend.EventBasedAsync` based on Akka Persistence Event
+    * Sourcing.
+    *
+    * Events are stored in the journal and tagged with the following tag:
+    * `$$entityKind-$$partitionId`. Partition ids are computed as follows:
+    * `Math.abs(entityId.hashCode % eventPartitions)`.
+    *
+    * For further details on event tagging see the documentation of Akka Projections.
+    */
   object EventBasedAsync {
-    import akka.persistence.typed.scaladsl.Effect
-    import akka.persistence.typed.RecoveryFailed
-    import akka.persistence.typed.SnapshotCompleted
-    import akka.persistence.typed.SnapshotFailed
-    import akka.persistence.typed.RecoveryCompleted
-
     private[spekka] def behaviorFactory[State, Ev, In, Command](
         entityKind: String,
         entityId: String,
@@ -615,193 +872,28 @@ object AkkaPersistenceStatefulFlowBackend {
         eventAdapter: Option[EventAdapter[Ev, _]],
         snapshotAdapter: Option[SnapshotAdapter[State]]
       ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, EventBased.AkkaPersistenceBackendProtocol]] = {
-      val partitionId = Math.abs(entityId.hashCode % partitions)
-      val partitionTag = Set(s"$entityKind-$partitionId")
-
-      Behaviors.setup { actorContext =>
-        implicit val ec: scala.concurrent.ExecutionContext = actorContext.executionContext
-
-        val baseBehavior =
-          EventSourcedBehavior[
-            StatefulFlowHandler.Protocol[
-              In,
-              Ev,
-              Command,
-              EventBased.AkkaPersistenceBackendProtocol
-            ],
-            Ev,
-            StateWrapper[State]
-          ](
-            PersistenceId(entityKind, entityId),
-            StateWrapper.recoveredState(logic.initialState),
-            (state, req) =>
-              req match {
-                case EventBased.BeforeSideEffectCompleted(
-                      result: StatefulFlowLogic.EventBased.ProcessingResult[Ev @unchecked],
-                      successAction,
-                      failureAction
-                    ) =>
-                  if (result.afterUpdateSideEffects.nonEmpty) {
-                    Effect
-                      .persist(result.events)
-                      .thenRun { _ =>
-                        SideEffectRunner
-                          .run(result.afterUpdateSideEffects, sideEffectsParallelism)
-                          .onComplete {
-                            case Success(_) =>
-                              actorContext.self ! EventBased.AfterSideEffectCompleted(successAction)
-                            case Failure(ex) =>
-                              actorContext.self ! EventBased.SideEffectFailure(ex, failureAction)
-                          }
-                      }
-                  } else {
-                    Effect
-                      .persist(result.events)
-                      .thenRun((s: StateWrapper[State]) => s.waitingForProcessingCompletion = false)
-                      .thenRun(_ => successAction())
-                      .thenUnstashAll()
-                  }
-
-                case EventBased.AfterSideEffectCompleted(successAction) =>
-                  state.waitingForProcessingCompletion = false
-                  successAction()
-                  Effect.unstashAll()
-
-                case EventBased.SideEffectFailure(ex, failureAction) =>
-                  state.waitingForProcessingCompletion = false
-                  actorContext.log.error("Failure handling processing side effects", ex)
-                  failureAction(ex)
-                  Effect.none
-
-                case flowInput: StatefulFlowHandler.ProcessFlowInput[In, Ev] =>
-                  if (!state.waitingForProcessingCompletion) {
-                    val self = actorContext.self
-
-                    Try(logic.processInput(state.innerState, flowInput.in)) match {
-                      case Success(resultF) =>
-                        resultF.andThen { case res =>
-                          self.tell(
-                            EventBased.InputProcessingResultReady(res, flowInput.replyTo)
-                          )
-                        }
-                        Effect.none
-                      case Failure(ex) =>
-                        actorContext.log.error("Failure handling input", ex)
-                        Effect.reply(flowInput.replyTo)(StatusReply.error(ex))
-                        Effect.none
-                    }
-                  } else Effect.stash()
-
-                case EventBased.InputProcessingResultReady(
-                      res: Try[StatefulFlowLogic.EventBased.ProcessingResult[Ev]] @unchecked,
-                      replyTo
-                    ) =>
-                  res match {
-                    case Success(result) =>
-                      val successAction = () => {
-                        replyTo ! StatusReply.success(
-                          StatefulFlowHandler.ProcessFlowOutput(result.events)
-                        )
-                      }
-                      val failureAction =
-                        (ex: Throwable) => replyTo ! StatusReply.error(ex)
-
-                      EventBased.handleResult(
-                        actorContext.self,
-                        state,
-                        result,
-                        successAction,
-                        failureAction,
-                        sideEffectsParallelism
-                      )
-
-                    case Failure(ex) =>
-                      actorContext.log.error("Failure handling input", ex)
-                      Effect.reply(replyTo)(StatusReply.error(ex))
-
-                  }
-
-                case commandRequest: StatefulFlowHandler.ProcessCommand[Command] =>
-                  if (!state.waitingForProcessingCompletion) {
-                    val self = actorContext.self
-
-                    Try(logic.processCommand(state.innerState, commandRequest.command)) match {
-                      case Success(resultF) =>
-                        resultF.andThen { case res =>
-                          self.tell(
-                            EventBased.CommandProcessingResultReady(res)
-                          )
-                        }
-                        Effect.none
-                      case Failure(ex) =>
-                        actorContext.log.error("Failure handling command", ex)
-                        Effect.none
-                    }
-                  } else Effect.stash()
-
-                case EventBased.CommandProcessingResultReady(
-                      resultE: Try[StatefulFlowLogic.EventBased.ProcessingResult[Ev]] @unchecked
-                    ) =>
-                  resultE match {
-                    case Success(result) =>
-                      val successAction = () => ()
-                      val failureAction = (_: Throwable) => ()
-
-                      EventBased.handleResult(
-                        actorContext.self,
-                        state,
-                        result,
-                        successAction,
-                        failureAction,
-                        sideEffectsParallelism
-                      )
-
-                    case Failure(ex) =>
-                      actorContext.log.error("Failure handling command", ex)
-                      Effect.none
-                  }
-
-                case StatefulFlowHandler.TerminateRequest(replyTo) =>
-                  if (!state.waitingForProcessingCompletion) {
-                    replyTo.tell(StatusReply.ack())
-                    Effect.stop()
-                  } else Effect.stash()
-
-                case msg =>
-                  if (!state.waitingForProcessingCompletion) {
-                    actorContext.log.error(
-                      s"Inconsistency in AkkaPersistenceStatefulFlowBackend.EventBased. Received unexpected message: ${msg}"
-                    )
-                    Effect.stop()
-                  } else Effect.stash()
-              },
-            (state, event) => state.withInnerState(logic.updateState(state.innerState, event))
-          ).withRetention(retentionCriteria)
-            .withTagger(_ => partitionTag)
-            .withJournalPluginId(storagePlugin.journalPluginId)
-            .withSnapshotPluginId(storagePlugin.snapshotPluginId)
-            .receiveSignal {
-              case (state, _: RecoveryCompleted) =>
-                state.waitForRecoverCompletion = false
-                actorContext.log.info(s"Recovery completed with state: ${state.innerState}")
-              case (_, RecoveryFailed(ex)) => actorContext.log.error("Recovery failed", ex)
-              case (_, c: SnapshotCompleted) =>
-                if (actorContext.log.isDebugEnabled()) {
-                  actorContext.log.debug(s"Snapshot completed with metadata: ${c.metadata}")
-                }
-              case (_, SnapshotFailed(metadata, ex)) =>
-                actorContext.log.error(s"Snapshot failed for metadata ${metadata}", ex)
-            }
-
-        val behaviorWithEventAdapter =
-          eventAdapter.map(baseBehavior.eventAdapter).getOrElse(baseBehavior)
-
-        val behaviorWithEventAndSnapshotAdapter = snapshotAdapter
-          .map(a => behaviorWithEventAdapter.snapshotAdapter(makeWrappedSnapshotAdapted(a)))
-          .getOrElse(behaviorWithEventAdapter.snapshotAdapter(defaultSnapshotAdapter))
-
-        behaviorWithEventAndSnapshotAdapter
-      }
+      EventBased.behaviorFactoryProto[State, Ev, In, Command](
+        entityKind,
+        entityId,
+        () => logic.initialState,
+        logic.updateState,
+        retentionCriteria,
+        storagePlugin,
+        partitions,
+        sideEffectsParallelism,
+        eventAdapter,
+        snapshotAdapter,
+        (state, input, actorContext) =>
+          EventBased.handleInputAsync(state, input, logic, actorContext, sideEffectsParallelism),
+        (state, msg, actorContext) =>
+          EventBased
+            .handleInputImpl(state, msg.result, actorContext, msg.replyTo, sideEffectsParallelism),
+        (state, command, actorContext) =>
+          EventBased
+            .handleCommandAsync(state, command, logic, actorContext, sideEffectsParallelism),
+        (state, msg, actorContext) =>
+          EventBased.handleCommandImpl(state, msg.result, actorContext, sideEffectsParallelism)
+      )
     }
 
     /** Creates a new instance of [[AkkaPersistenceStatefulFlowBackend.EventBasedAsync]].
@@ -837,7 +929,8 @@ object AkkaPersistenceStatefulFlowBackend {
       )
   }
 
-  /** An `StatefulFlowBackend.EventBased` implementation based on Akka Persistence Event Sourcing.
+  /** An `StatefulFlowBackend.EventBasedAsync` implementation based on Akka Persistence Event
+    * Sourcing.
     */
   class EventBasedAsync[State, Ev] private[spekka] (
       storagePlugin: EventBased.PersistencePlugin,
@@ -1095,19 +1188,272 @@ object AkkaPersistenceStatefulFlowBackend {
             )
         }
       } else {
+        state.waitingForProcessingCompletion = false
         Effect
           .persist(state.withInnerState(result.state))
           .thenRun((_: StateWrapper[State]) => successAction())
       }
     }
 
-    private[spekka] def behaviorFactory[State, In, Out, Command](
+    private[spekka] def handleBeforeSideEffect[State, Ev, In, Command](
+        state: StateWrapper[State],
+        result: StatefulFlowLogic.DurableState.ProcessingResult[State, _],
+        successAction: () => Unit,
+        failureAction: (Throwable) => Unit,
+        self: ActorRef[
+          StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      )(implicit ec: ExecutionContext
+      ): Effect[StateWrapper[State]] = {
+      if (result.afterUpdateSideEffects.nonEmpty) {
+        Effect
+          .persist(state.withInnerState(result.state))
+          .thenRun { _ =>
+            SideEffectRunner
+              .run(result.afterUpdateSideEffects, sideEffectsParallelism)
+              .onComplete {
+                case Success(_) =>
+                  self ! AfterSideEffectCompleted(successAction)
+                case Failure(ex) =>
+                  self ! SideEffectFailure(ex, failureAction)
+              }
+          }
+      } else {
+        Effect
+          .persist(state.withInnerState(result.state))
+          .thenRun((s: StateWrapper[State]) => s.waitingForProcessingCompletion = false)
+          .thenRun(_ => successAction())
+          .thenUnstashAll()
+      }
+    }
+
+    private[spekka] def handleAfterSideEffect[State](
+        state: StateWrapper[State],
+        successAction: () => Unit
+      ): Effect[StateWrapper[State]] = {
+      state.waitingForProcessingCompletion = false
+      successAction()
+      Effect.unstashAll[StateWrapper[State]]()
+    }
+
+    private[spekka] def handleSideEffectFailure[State](
+        state: StateWrapper[State],
+        failureAction: (Throwable) => Unit,
+        ex: Throwable,
+        log: Logger
+      ): EffectBuilder[StateWrapper[State]] = {
+      state.waitingForProcessingCompletion = false
+      log.error("Failure handling processing side effects", ex)
+      failureAction(ex)
+      Effect.none[StateWrapper[State]]
+    }
+
+    private[spekka] def handleInputImpl[State, In, Out, Command](
+        state: StateWrapper[State],
+        result: Try[StatefulFlowLogic.DurableState.ProcessingResult[State, Out]],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+        ],
+        replyTo: ActorRef[
+          StatusReply[StatefulFlowHandler.ProcessFlowOutput[Out]]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[StateWrapper[State]] = {
+      result match {
+        case Success(result) =>
+          val successAction = () =>
+            replyTo ! StatusReply.success(
+              StatefulFlowHandler.ProcessFlowOutput(result.outs)
+            )
+          val failureAction =
+            (ex: Throwable) => replyTo ! StatusReply.error(ex)
+
+          handleResult(
+            actorContext.self,
+            state,
+            result,
+            successAction,
+            failureAction,
+            sideEffectsParallelism
+          )(actorContext.executionContext)
+
+        case Failure(ex) =>
+          actorContext.log.error("Failure handling input", ex)
+          Effect.reply(replyTo)(StatusReply.error(ex))
+      }
+    }
+
+    private[spekka] def handleInputSync[State, In, Out, Command](
+        state: StateWrapper[State],
+        flowInput: StatefulFlowHandler.ProcessFlowInput[In, Out],
+        logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[StateWrapper[State]] = {
+      if (!state.waitingForProcessingCompletion) {
+        val result = Try(logic.processInput(state.innerState, flowInput.in))
+        handleInputImpl(state, result, actorContext, flowInput.replyTo, sideEffectsParallelism)
+      } else Effect.stash()
+    }
+
+    private[spekka] def handleInputAsync[State, In, Out, Command](
+        state: StateWrapper[State],
+        flowInput: StatefulFlowHandler.ProcessFlowInput[In, Out],
+        logic: StatefulFlowLogic.DurableStateAsync[State, In, Out, Command],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[StateWrapper[State]] = {
+      if (!state.waitingForProcessingCompletion) {
+        val self = actorContext.self
+
+        Try(logic.processInput(state.innerState, flowInput.in)) match {
+          case Success(resultF) =>
+            resultF.value match {
+              case Some(result) =>
+                handleInputImpl(
+                  state,
+                  result,
+                  actorContext,
+                  flowInput.replyTo,
+                  sideEffectsParallelism
+                )
+
+              case None =>
+                state.waitingForProcessingCompletion = true
+                resultF.andThen { case res =>
+                  self.tell(
+                    DurableState.InputProcessingResultReady(res, flowInput.replyTo)
+                  )
+                }(actorContext.executionContext)
+                Effect.none
+            }
+
+          case Failure(ex) =>
+            actorContext.log.error("Failure handling input", ex)
+            Effect.reply(flowInput.replyTo)(StatusReply.error(ex))
+        }
+      } else Effect.stash()
+    }
+
+    private[spekka] def handleCommandImpl[State, In, Out, Command](
+        state: StateWrapper[State],
+        result: Try[StatefulFlowLogic.DurableState.ProcessingResult[State, Nothing]],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[StateWrapper[State]] = {
+      result match {
+        case Success(result) =>
+          val successAction = () => ()
+          val failureAction = (_: Throwable) => ()
+
+          handleResult(
+            actorContext.self,
+            state,
+            result,
+            successAction,
+            failureAction,
+            sideEffectsParallelism
+          )(actorContext.executionContext)
+
+        case Failure(ex) =>
+          actorContext.log.error("Failure handling command", ex)
+          Effect.none
+      }
+    }
+
+    private[spekka] def handleCommandSync[State, In, Out, Command](
+        state: StateWrapper[State],
+        commandRequest: StatefulFlowHandler.ProcessCommand[Command],
+        logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[StateWrapper[State]] = {
+      if (!state.waitingForProcessingCompletion) {
+        handleCommandImpl(
+          state,
+          Try(logic.processCommand(state.innerState, commandRequest.command)),
+          actorContext,
+          sideEffectsParallelism
+        )
+      } else Effect.stash()
+    }
+
+    private[spekka] def handleCommandAsync[State, In, Out, Command](
+        state: StateWrapper[State],
+        commandRequest: StatefulFlowHandler.ProcessCommand[Command],
+        logic: StatefulFlowLogic.DurableStateAsync[State, In, Out, Command],
+        actorContext: ActorContext[
+          StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+        ],
+        sideEffectsParallelism: Int
+      ): Effect[StateWrapper[State]] = {
+      if (!state.waitingForProcessingCompletion) {
+        Try(logic.processCommand(state.innerState, commandRequest.command)) match {
+          case Success(resultF) =>
+            resultF.value match {
+              case Some(result) =>
+                handleCommandImpl(state, result, actorContext, sideEffectsParallelism)
+              case None =>
+                state.waitingForProcessingCompletion = true
+                resultF.andThen { case res =>
+                  actorContext.self.tell(
+                    DurableState.CommandProcessingResultReady(res)
+                  )
+                }(actorContext.executionContext)
+                Effect.none
+            }
+
+          case Failure(ex) =>
+            actorContext.log.error("Failure handling command", ex)
+            Effect.none
+        }
+      } else Effect.stash()
+    }
+
+    private[spekka] def behaviorFactoryProto[State, In, Out, Command](
         entityKind: String,
         entityId: String,
-        logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
+        initialState: () => State,
         storagePlugin: PersistencePlugin,
         sideEffectsParallelism: Int,
-        snapshotAdapter: Option[SnapshotAdapter[State]]
+        snapshotAdapter: Option[SnapshotAdapter[State]],
+        inputHandler: (
+            StateWrapper[State],
+            StatefulFlowHandler.ProcessFlowInput[In, Out],
+            ActorContext[
+              StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+            ]
+        ) => Effect[StateWrapper[State]],
+        inputProcessingReadyHandler: (
+            StateWrapper[State],
+            InputProcessingResultReady[State, Out],
+            ActorContext[
+              StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+            ]
+        ) => Effect[StateWrapper[State]],
+        commandHandler: (
+            StateWrapper[State],
+            StatefulFlowHandler.ProcessCommand[Command],
+            ActorContext[
+              StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+            ]
+        ) => Effect[StateWrapper[State]],
+        commandProcessingReadyHandler: (
+            StateWrapper[State],
+            CommandProcessingResultReady[State],
+            ActorContext[
+              StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
+            ]
+        ) => Effect[StateWrapper[State]]
       ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]] = {
       Behaviors.setup { actorContext =>
         implicit val ec: scala.concurrent.ExecutionContext = actorContext.executionContext
@@ -1117,7 +1463,7 @@ object AkkaPersistenceStatefulFlowBackend {
           StateWrapper[State]
         ](
           PersistenceId(entityKind, entityId),
-          StateWrapper.recoveredState(logic.initialState),
+          StateWrapper.recoveredState(initialState()),
           (state, req) =>
             req match {
               case BeforeSideEffectCompleted(
@@ -1128,85 +1474,32 @@ object AkkaPersistenceStatefulFlowBackend {
                     successAction,
                     failureAction
                   ) =>
-                if (result.afterUpdateSideEffects.nonEmpty) {
-                  Effect
-                    .persist(state.withInnerState(result.state))
-                    .thenRun { _ =>
-                      SideEffectRunner
-                        .run(result.afterUpdateSideEffects, sideEffectsParallelism)
-                        .onComplete {
-                          case Success(_) =>
-                            actorContext.self ! AfterSideEffectCompleted(successAction)
-                          case Failure(ex) =>
-                            actorContext.self ! SideEffectFailure(ex, failureAction)
-                        }
-                    }
-                } else {
-                  Effect
-                    .persist(state.withInnerState(result.state))
-                    .thenRun((s: StateWrapper[State]) => s.waitingForProcessingCompletion = false)
-                    .thenRun(_ => successAction())
-                    .thenUnstashAll()
-                }
+                handleBeforeSideEffect(
+                  state,
+                  result,
+                  successAction,
+                  failureAction,
+                  actorContext.self,
+                  sideEffectsParallelism
+                )
 
               case AfterSideEffectCompleted(successAction) =>
-                state.waitingForProcessingCompletion = false
-                successAction()
-                Effect.unstashAll()
+                handleAfterSideEffect(state, successAction)
 
               case SideEffectFailure(ex, failureAction) =>
-                state.waitingForProcessingCompletion = false
-                actorContext.log.error("Failure handling processing side effects", ex)
-                failureAction(ex)
-                Effect.none
+                handleSideEffectFailure(state, failureAction, ex, actorContext.log)
 
               case flowInput: StatefulFlowHandler.ProcessFlowInput[In, Out] =>
-                if (!state.waitingForProcessingCompletion) {
-                  Try(logic.processInput(state.innerState, flowInput.in)) match {
-                    case Success(result) =>
-                      val successAction = () =>
-                        flowInput.replyTo ! StatusReply.success(
-                          StatefulFlowHandler.ProcessFlowOutput(result.outs)
-                        )
-                      val failureAction =
-                        (ex: Throwable) => flowInput.replyTo ! StatusReply.error(ex)
+                inputHandler(state, flowInput, actorContext)
 
-                      handleResult(
-                        actorContext.self,
-                        state,
-                        result,
-                        successAction,
-                        failureAction,
-                        sideEffectsParallelism
-                      )
-
-                    case Failure(ex) =>
-                      actorContext.log.error("Failure handling input", ex)
-                      Effect.reply(flowInput.replyTo)(StatusReply.error(ex))
-                  }
-                } else Effect.stash()
+              case msg: InputProcessingResultReady[State @unchecked, Out @unchecked] =>
+                inputProcessingReadyHandler(state, msg, actorContext)
 
               case commandRequest: StatefulFlowHandler.ProcessCommand[Command] =>
-                if (!state.waitingForProcessingCompletion) {
-                  Try(logic.processCommand(state.innerState, commandRequest.command)) match {
-                    case Success(result) =>
-                      val successAction = () => ()
-                      val failureAction = (_: Throwable) => ()
+                commandHandler(state, commandRequest, actorContext)
 
-                      handleResult(
-                        actorContext.self,
-                        state,
-                        result,
-                        successAction,
-                        failureAction,
-                        sideEffectsParallelism
-                      )
-
-                    case Failure(ex) =>
-                      actorContext.log.error("Failure handling command", ex)
-                      Effect.none
-                  }
-                } else Effect.stash()
+              case msg: CommandProcessingResultReady[State @unchecked] =>
+                commandProcessingReadyHandler(state, msg, actorContext)
 
               case StatefulFlowHandler.TerminateRequest(replyTo) =>
                 if (!state.waitingForProcessingCompletion) {
@@ -1236,6 +1529,36 @@ object AkkaPersistenceStatefulFlowBackend {
 
         behaviorWithSnapshotAdapter
       }
+    }
+
+    private[spekka] def behaviorFactory[State, In, Out, Command](
+        entityKind: String,
+        entityId: String,
+        logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
+        storagePlugin: PersistencePlugin,
+        sideEffectsParallelism: Int,
+        snapshotAdapter: Option[SnapshotAdapter[State]]
+      ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]] = {
+      behaviorFactoryProto[State, In, Out, Command](
+        entityKind,
+        entityId,
+        () => logic.initialState,
+        storagePlugin,
+        sideEffectsParallelism,
+        snapshotAdapter,
+        (state, flowInput, actorContext) =>
+          handleInputSync(state, flowInput, logic, actorContext, sideEffectsParallelism),
+        (_, _, _) =>
+          throw new IllegalStateException(
+            "Inconsistency in AkkaPersistenceStatefulFlowBackend.DurableState"
+          ),
+        (state, commandRequest, actorContext) =>
+          handleCommandSync(state, commandRequest, logic, actorContext, sideEffectsParallelism),
+        (_, _, _) =>
+          throw new IllegalStateException(
+            "Inconsistency in AkkaPersistenceStatefulFlowBackend.DurableState"
+          )
+      )
     }
 
     /** Creates a new instance of [[AkkaPersistenceStatefulFlowBackend.DurableState]].
@@ -1335,11 +1658,10 @@ object AkkaPersistenceStatefulFlowBackend {
       )
   }
 
+  /** An implementation of `StatefulFlowBackend.DurableStateAsync` based on Akka Persistence Durable
+    * State.
+    */
   object DurableStateAsync {
-    import akka.persistence.typed.state.scaladsl.Effect
-    import akka.persistence.typed.state.RecoveryFailed
-    import akka.persistence.typed.state.RecoveryCompleted
-
     private[spekka] def behaviorFactory[State, In, Out, Command](
         entityKind: String,
         entityId: String,
@@ -1348,182 +1670,25 @@ object AkkaPersistenceStatefulFlowBackend {
         sideEffectsParallelism: Int,
         snapshotAdapter: Option[SnapshotAdapter[State]]
       ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, DurableState.AkkaPersistenceBackendProtocol]] = {
-      Behaviors.setup { actorContext =>
-        implicit val ec: scala.concurrent.ExecutionContext = actorContext.executionContext
-
-        val baseBehavior = DurableStateBehavior[
-          StatefulFlowHandler.Protocol[
-            In,
-            Out,
-            Command,
-            DurableState.AkkaPersistenceBackendProtocol
-          ],
-          StateWrapper[State]
-        ](
-          PersistenceId(entityKind, entityId),
-          StateWrapper.recoveredState(logic.initialState),
-          (state, req) =>
-            req match {
-              case DurableState.BeforeSideEffectCompleted(
-                    result: StatefulFlowLogic.DurableState.ProcessingResult[
-                      State @unchecked,
-                      Out @unchecked
-                    ],
-                    successAction,
-                    failureAction
-                  ) =>
-                if (result.afterUpdateSideEffects.nonEmpty) {
-                  Effect
-                    .persist(state.withInnerState(result.state))
-                    .thenRun { _ =>
-                      SideEffectRunner
-                        .run(result.afterUpdateSideEffects, sideEffectsParallelism)
-                        .onComplete {
-                          case Success(_) =>
-                            actorContext.self ! DurableState.AfterSideEffectCompleted(successAction)
-                          case Failure(ex) =>
-                            actorContext.self ! DurableState.SideEffectFailure(ex, failureAction)
-                        }
-                    }
-                } else {
-                  Effect
-                    .persist(state.withInnerState(result.state))
-                    .thenRun((s: StateWrapper[State]) => s.waitingForProcessingCompletion = false)
-                    .thenRun(_ => successAction())
-                    .thenUnstashAll()
-                }
-
-              case DurableState.AfterSideEffectCompleted(successAction) =>
-                state.waitingForProcessingCompletion = false
-                successAction()
-                Effect.unstashAll()
-
-              case DurableState.SideEffectFailure(ex, failureAction) =>
-                state.waitingForProcessingCompletion = false
-                actorContext.log.error("Failure handling processing side effects", ex)
-                failureAction(ex)
-                Effect.none
-
-              case flowInput: StatefulFlowHandler.ProcessFlowInput[In, Out] =>
-                if (!state.waitingForProcessingCompletion) {
-                  val self = actorContext.self
-
-                  Try(logic.processInput(state.innerState, flowInput.in)) match {
-                    case Success(resultF) =>
-                      resultF.andThen { case res =>
-                        self.tell(
-                          DurableState.InputProcessingResultReady(res, flowInput.replyTo)
-                        )
-                      }
-                      Effect.none
-
-                    case Failure(ex) =>
-                      actorContext.log.error("Failure handling input", ex)
-                      Effect.reply(flowInput.replyTo)(StatusReply.error(ex))
-                  }
-                } else Effect.stash()
-
-              case DurableState.InputProcessingResultReady(
-                    res: Try[
-                      StatefulFlowLogic.DurableState.ProcessingResult[State, Out]
-                    ] @unchecked,
-                    replyTo
-                  ) =>
-                res match {
-                  case Success(result) =>
-                    val successAction = () =>
-                      replyTo ! StatusReply.success(
-                        StatefulFlowHandler.ProcessFlowOutput(result.outs)
-                      )
-                    val failureAction =
-                      (ex: Throwable) => replyTo ! StatusReply.error(ex)
-
-                    DurableState.handleResult(
-                      actorContext.self,
-                      state,
-                      result,
-                      successAction,
-                      failureAction,
-                      sideEffectsParallelism
-                    )
-
-                  case Failure(ex) =>
-                    actorContext.log.error("Failure handling input", ex)
-                    Effect.reply(replyTo)(StatusReply.error(ex))
-
-                }
-
-              case commandRequest: StatefulFlowHandler.ProcessCommand[Command] =>
-                if (!state.waitingForProcessingCompletion) {
-                  val self = actorContext.self
-
-                  Try(logic.processCommand(state.innerState, commandRequest.command)) match {
-                    case Success(resultF) =>
-                      resultF.andThen { case res =>
-                        self.tell(
-                          DurableState.CommandProcessingResultReady(res)
-                        )
-                      }
-                      Effect.none
-
-                    case Failure(ex) =>
-                      actorContext.log.error("Failure handling command", ex)
-                      Effect.none
-                  }
-                } else Effect.stash()
-
-              case DurableState.CommandProcessingResultReady(
-                    resultE: Try[
-                      StatefulFlowLogic.DurableState.ProcessingResult[State, Out]
-                    ] @unchecked
-                  ) =>
-                resultE match {
-                  case Success(result) =>
-                    val successAction = () => ()
-                    val failureAction = (_: Throwable) => ()
-
-                    DurableState.handleResult(
-                      actorContext.self,
-                      state,
-                      result,
-                      successAction,
-                      failureAction,
-                      sideEffectsParallelism
-                    )
-
-                  case Failure(ex) =>
-                    actorContext.log.error("Failure handling command", ex)
-                    Effect.none
-                }
-
-              case StatefulFlowHandler.TerminateRequest(replyTo) =>
-                if (!state.waitingForProcessingCompletion) {
-                  replyTo.tell(StatusReply.ack())
-                  Effect.stop()
-                } else Effect.stash()
-
-              case msg =>
-                if (!state.waitingForProcessingCompletion) {
-                  actorContext.log.error(
-                    s"Inconsistency in AkkaPersistenceStatefulFlowBackend.DurableState. Received unexpected message: ${msg}"
-                  )
-                  Effect.stop()
-                } else Effect.stash()
-            }
-        ).withDurableStateStorePluginId(storagePlugin.statePluginId)
-          .receiveSignal {
-            case (state, _: RecoveryCompleted) =>
-              state.waitForRecoverCompletion = false
-              actorContext.log.info(s"Recovery completed with state: ${state.innerState}")
-            case (_, RecoveryFailed(ex)) => actorContext.log.error("Recovery failed", ex)
-          }
-
-        val behaviorWithSnapshotAdapter = snapshotAdapter
-          .map(a => baseBehavior.snapshotAdapter(makeWrappedSnapshotAdapted(a)))
-          .getOrElse(baseBehavior.snapshotAdapter(defaultSnapshotAdapter))
-
-        behaviorWithSnapshotAdapter
-      }
+      DurableState.behaviorFactoryProto[State, In, Out, Command](
+        entityKind,
+        entityId,
+        () => logic.initialState,
+        storagePlugin,
+        sideEffectsParallelism,
+        snapshotAdapter,
+        (state, flowInput, actorContext) =>
+          DurableState
+            .handleInputAsync(state, flowInput, logic, actorContext, sideEffectsParallelism),
+        (state, msg, actorContext) =>
+          DurableState
+            .handleInputImpl(state, msg.result, actorContext, msg.replyTo, sideEffectsParallelism),
+        (state, commandRequest, actorContext) =>
+          DurableState
+            .handleCommandAsync(state, commandRequest, logic, actorContext, sideEffectsParallelism),
+        (state, msg, actorContext) =>
+          DurableState.handleCommandImpl(state, msg.result, actorContext, sideEffectsParallelism)
+      )
     }
 
     /** Creates a new instance of [[AkkaPersistenceStatefulFlowBackend.DurableStateAsync]].
@@ -1548,7 +1713,8 @@ object AkkaPersistenceStatefulFlowBackend {
       )
   }
 
-  /** An `StatefulFlowBackend.DurableState` implementation based on Akka Persistence Durable State.
+  /** An `StatefulFlowBackend.DurableStateAsync` implementation based on Akka Persistence Durable
+    * State.
     */
   class DurableStateAsync[State] private[spekka] (
       storagePlugin: DurableState.PersistencePlugin,

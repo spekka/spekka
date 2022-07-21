@@ -87,6 +87,19 @@ object StatefulFlowBackend {
       new StatefulFlowProps.EventBased[State, Ev, In, Command, BackendProtocol](logic, this)
   }
 
+  /** A [[StatefulFlowBackend]] for [[StatefulFlowLogic.EventBasedAsync]] logics.
+    *
+    * The state is defined by the series of event that generated it. The backend is responsible of
+    * persisting the individual events and recompute the state by re-applying the persisted events
+    * starting from the initial empty state.
+    *
+    * @tparam State
+    *   the type of state managed by the backend
+    * @tparam Ev
+    *   the type of event managed by the backend
+    * @tparam BackendProtocol
+    *   the internal protocol of the backend
+    */
   trait EventBasedAsync[State, Ev, BackendProtocol] extends StatefulFlowBackend {
 
     /** The logic type compatible with this backend
@@ -102,8 +115,8 @@ object StatefulFlowBackend {
     /** Creates a [[StatefulFlowProps]] for this backend with the specified logic.
       *
       * @param logic
-      *   An [[StatefulFlowLogic.EventBased]] logic to use together with this backend to create a
-      *   stateful flow
+      *   An [[StatefulFlowLogic.EventBasedAsync]] logic to use together with this backend to create
+      *   a stateful flow
       * @return
       *   [[StatefulFlowProps]] for this backend and the specified logic
       */
@@ -146,6 +159,13 @@ object StatefulFlowBackend {
       new StatefulFlowProps.DurableState[State, In, Out, Command, BackendProtocol](logic, this)
   }
 
+  /** A [[StatefulFlowBackend]] for [[StatefulFlowLogic.DurableStateAsync]] logics.
+    *
+    * @tparam State
+    *   the type of state managed by the backend
+    * @tparam BackendProtocol
+    *   the internal protocol of the backend
+    */
   trait DurableStateAsync[State, BackendProtocol] extends StatefulFlowBackend {
 
     /** The logic type compatible with this backend
@@ -161,8 +181,8 @@ object StatefulFlowBackend {
     /** Creates a [[StatefulFlowProps]] for this backend with the specified logic.
       *
       * @param logic
-      *   An [[StatefulFlowLogic.EventBased]] logic to use together with this backend to create a
-      *   stateful flow
+      *   An [[StatefulFlowLogic.EventBasedAsync]] logic to use together with this backend to create
+      *   a stateful flow
       * @return
       *   [[StatefulFlowProps]] for this backend and the specified logic
       */
