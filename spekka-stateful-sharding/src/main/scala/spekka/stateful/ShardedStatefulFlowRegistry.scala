@@ -219,6 +219,7 @@ object ShardedStatefulFlowRegistry {
         ShardingEnvelope[StatefulFlowHandler.Protocol[In, Out, Command, Nothing]]
       ])
       extends StatefulFlowBuilder[In, Out, Command] {
+
     val entityKind: String = entityType.name
 
     override def flow(
@@ -271,6 +272,15 @@ object ShardedStatefulFlowRegistry {
 
     def control(entityId: String): Future[Option[StatefulFlowControl[Command]]] =
       registry.makeControl(this, entityId)
+
+    override def lazyControl(implicit ec: ExecutionContext): StatefulFlowLazyControl[Command] =
+      new StatefulFlowRegistry.StatefulFlowLazyMultiControlImpl(this)
+
+    override def lazyEntityControl(
+        entityId: String
+      )(implicit ec: ExecutionContext
+      ): StatefulFlowLazyEntityControl[Command] =
+      new StatefulFlowRegistry.StatefulFlowLazyMultiControlImpl(this).narrow(entityId)
   }
 
   /** Creates a [[ShardedStatefulFlowRegistry]].
