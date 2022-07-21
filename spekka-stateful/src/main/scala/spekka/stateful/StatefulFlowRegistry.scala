@@ -231,6 +231,80 @@ object StatefulFlowRegistry {
       } yield Done
   }
 
+  final private[spekka] class StatefulFlowLazyControlImpl[Command](
+      control: StatefulFlowLazyMultiControlImpl[Command],
+      entityId: String
+    ) extends StatefulFlowLazyEntityControl[Command] {
+    override def command(command: Command): Future[Unit] = control.command(entityId, command)
+    
+
+    override def commandOption(command: Command): Future[Boolean] = control.commandOption(entityId, command)
+
+    override def commandWithResult[Result](
+        f: ActorRef[StatusReply[Result]] => Command
+      ): Future[Result] = control.commandWithResult(entityId, f)
+
+    override def commandWithResultOption[Result](
+        f: ActorRef[StatusReply[Result]] => Command
+      ): Future[Option[Result]] = control.commandWithResultOption(entityId, f)
+  }
+
+  final private[spekka] class StatefulFlowLazyMultiControlImpl[Command](
+      builder: StatefulFlowBuilder[_, _, Command]
+    )(implicit ec: ExecutionContext)
+      extends StatefulFlowLazyControl[Command] {
+    override def command(entityId: String, command: Command): Future[Unit] = {
+      for {
+        maybeCtrl <- builder.control(entityId)
+        _ <- maybeCtrl match {
+          case Some(ctrl) => Future.successful(ctrl.command(command))
+          case None => Future.failed(new StatefulFlowNotMaterialized(builder.entityKind, entityId))
+        }
+      } yield ()
+    }
+
+    override def commandOption(entityId: String, command: Command): Future[Boolean] = {
+      for {
+        maybeCtrl <- builder.control(entityId)
+        res = maybeCtrl match {
+          case Some(ctrl) =>
+            ctrl.command(command);
+            true
+          case None =>
+            false
+        }
+      } yield res
+    }
+
+    override def commandWithResult[Result](
+        entityId: String,
+        f: ActorRef[StatusReply[Result]] => Command
+      ): Future[Result] = {
+      for {
+        maybeCtrl <- builder.control(entityId)
+        res <- maybeCtrl match {
+          case Some(ctrl) => ctrl.commandWithResult(f)
+          case None => Future.failed(new StatefulFlowNotMaterialized(builder.entityKind, entityId))
+        }
+      } yield res
+    }
+
+    override def commandWithResultOption[Result](
+        entityId: String,
+        f: ActorRef[StatusReply[Result]] => Command
+      ): Future[Option[Result]] = {
+      for {
+        maybeCtrl <- builder.control(entityId)
+        res <- maybeCtrl match {
+          case Some(ctrl) => ctrl.commandWithResult(f).map(Some(_))
+          case None => Future.successful(None)
+        }
+      } yield res
+    }
+
+    override def narrow(entityId: String): StatefulFlowLazyEntityControl[Command] = ???
+  }
+
   final private[spekka] class StatefulFlowBuilderImpl[In, Out, Command](
       private[spekka] val registry: StatefulFlowRegistry,
       val entityKind: String)
@@ -283,6 +357,12 @@ object StatefulFlowRegistry {
 
     def control(entityId: String): Future[Option[StatefulFlowControl[Command]]] =
       registry.makeControl(this, entityId)
+
+    def lazyControl(implicit ec: ExecutionContext): StatefulFlowLazyControl[Command] = 
+      new StatefulFlowLazyMultiControlImpl(this)
+
+    def lazyEntityControl(entityId: String)(implicit ec: ExecutionContext): StatefulFlowLazyEntityControl[Command] = 
+      new StatefulFlowLazyMultiControlImpl(this).narrow(entityId)
   }
 
   private[spekka] object Protocol {
