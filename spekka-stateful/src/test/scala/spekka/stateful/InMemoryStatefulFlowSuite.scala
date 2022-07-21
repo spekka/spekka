@@ -120,6 +120,63 @@ class InMemoryStatefulFlowSuite
     events shouldBe 1.to(10).map(i => IncreaseCounterWithTimestamp(i.toLong))
   }
 
+  test("event based async - simple flow with side effects") {
+    val inputSideEffectsProbe = TestProbe()
+    val commandSideEffectsProbe = TestProbe()
+
+    val flowProps = EventBasedTestLogicAsync(
+      TestState(0, 0),
+      100.millis,
+      inputBeforeSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("before" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      inputAfterSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("after" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      commandBeforeSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "before"))
+      },
+      commandAfterSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "after"))
+      }
+    )(system).propsForBackend(InMemoryStatefulFlowBackend.EventBasedAsync())
+
+    val resultF = for {
+      builder <- registry.registerStatefulFlow("testKind-event-async-effects", flowProps)
+
+      (controlF, resF) = Source(inputs)
+        .viaMat(builder.flow("1"))(Keep.right)
+        .toMat(Sink.seq)(Keep.both)
+        .run()
+
+      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+
+      res <- resF
+      control <- controlF
+
+      _ = commandSideEffectsProbe.expectNoMessage()
+      counter <- control.commandWithResult(GetCounter(_))
+      _ = commandSideEffectsProbe.expectMsg("before")
+      _ = commandSideEffectsProbe.expectMsg("after")
+
+      _ <- control.terminate()
+    } yield (counter, res.flatten)
+
+    val (counter, events) = resultF.futureValue
+
+    counter shouldBe 10L
+    events shouldBe 1.to(10).map(i => IncreaseCounterWithTimestamp(i.toLong))
+  }
+
   test("durable state - simple flow no side effects") {
     val flowProps = DurableStateTestLogic(TestState(0, 0))
       .propsForBackend(InMemoryStatefulFlowBackend.DurableState())
@@ -174,6 +231,62 @@ class InMemoryStatefulFlowSuite
 
     val resultF = for {
       builder <- registry.registerStatefulFlow("testKind-durable-effects", flowProps)
+
+      (controlF, resF) = Source(inputs)
+        .viaMat(builder.flow("1"))(Keep.right)
+        .toMat(Sink.seq)(Keep.both)
+        .run()
+
+      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+
+      res <- resF
+      control <- controlF
+
+      _ = commandSideEffectsProbe.expectNoMessage()
+      counter <- control.commandWithResult(GetCounter(_))
+      _ = commandSideEffectsProbe.expectMsg("before")
+      _ = commandSideEffectsProbe.expectMsg("after")
+
+      _ <- control.terminate()
+    } yield (counter, res.flatten)
+
+    val (counter, events) = resultF.futureValue
+    counter shouldBe 10L
+    events shouldBe 1.to(10).map(i => IncreaseCounterWithTimestamp(i.toLong))
+  }
+
+  test("durable state async - simple flow with side effects") {
+    val inputSideEffectsProbe = TestProbe()
+    val commandSideEffectsProbe = TestProbe()
+
+    val flowProps = DurableStateTestLogicAsync(
+      TestState(0, 0),
+      100.millis,
+      inputBeforeSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("before" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      inputAfterSideEffectsF = (state, input) => {
+        if (input.timestamp == 5L)
+          List(() =>
+            Future.successful(inputSideEffectsProbe.ref ! ("after" -> state.lastTimestamp))
+          )
+        else Nil
+      },
+      commandBeforeSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "before"))
+      },
+      commandAfterSideEffectsF = (_, _) => {
+        List(() => Future.successful(commandSideEffectsProbe.ref ! "after"))
+      }
+    )(system).propsForBackend(InMemoryStatefulFlowBackend.DurableStateAsync())
+
+    val resultF = for {
+      builder <- registry.registerStatefulFlow("testKind-durable-async-effects", flowProps)
 
       (controlF, resF) = Source(inputs)
         .viaMat(builder.flow("1"))(Keep.right)
