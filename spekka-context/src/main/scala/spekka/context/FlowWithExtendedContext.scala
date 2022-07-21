@@ -82,8 +82,8 @@ trait FlowWithExtendedContextSyntax {
 
   /** Ops class for [[FlowWithExtendedContext]] with iterable outputs
     */
-  implicit class FlowWithExtendedContextListOps[In, OutE, Out <: immutable.Iterable[OutE], Ctx, M](
-      backingFlow: FlowWithExtendedContext[In, Out, Ctx, M]) {
+  implicit class FlowWithExtendedContextListOps[In, Out, Ctx, M](
+      backingFlow: FlowWithExtendedContext[In, immutable.Iterable[Out], Ctx, M]) {
 
     /** Transform this flow by piping each element of the output through the given flow, recombining
       * the results back into a collection.
@@ -92,9 +92,25 @@ trait FlowWithExtendedContextSyntax {
       *   the flow used to transform each output elements
       */
     def viaMultiplexed[Out2](
-        flow: FlowWithExtendedContext[OutE, Out2, Ctx, _]
+        flow: FlowWithExtendedContext[Out, Out2, Ctx, _]
       ): FlowWithExtendedContext[In, immutable.Iterable[Out2], Ctx, M] =
       backingFlow.via(Multiplexed(flow))
+
+    /** Transform this flow by piping each element of the output through the given flow, recombining
+      * the results back into a collection.
+      *
+      * This variant allows to combine the materialization values.
+      *
+      * @param flow
+      *   the flow used to transform each output elements
+      * @param combine
+      *   the function used to combine materialization values
+      */
+    def viaMultiplexedMat[Out2, M2, M3](
+        flow: FlowWithExtendedContext[Out, Out2, Ctx, M2]
+      )(combine: (M, M2) => M3
+      ): FlowWithExtendedContext[In, immutable.Iterable[Out2], Ctx, M3] =
+      backingFlow.viaMat(Multiplexed(flow))(combine)
   }
 }
 
