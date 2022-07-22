@@ -274,13 +274,13 @@ object ShardedStatefulFlowRegistry {
       registry.makeControl(this, entityId)
 
     override def lazyControl(implicit ec: ExecutionContext): StatefulFlowLazyControl[Command] =
-      new StatefulFlowRegistry.StatefulFlowLazyMultiControlImpl(this)
+      new StatefulFlowRegistry.StatefulFlowLazyControlImpl(this)
 
     override def lazyEntityControl(
         entityId: String
       )(implicit ec: ExecutionContext
       ): StatefulFlowLazyEntityControl[Command] =
-      new StatefulFlowRegistry.StatefulFlowLazyMultiControlImpl(this).narrow(entityId)
+      new StatefulFlowRegistry.StatefulFlowLazyControlImpl(this).narrow(entityId)
   }
 
   /** Creates a [[ShardedStatefulFlowRegistry]].

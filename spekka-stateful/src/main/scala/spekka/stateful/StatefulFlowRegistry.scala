@@ -231,8 +231,8 @@ object StatefulFlowRegistry {
       } yield Done
   }
 
-  final private[spekka] class StatefulFlowLazyControlImpl[Command](
-      control: StatefulFlowLazyMultiControlImpl[Command],
+  final private[spekka] class StatefulFlowLazyEntityControlImpl[Command](
+      control: StatefulFlowLazyControlImpl[Command],
       entityId: String)
       extends StatefulFlowLazyEntityControl[Command] {
     override def command(command: Command): Future[Unit] = control.command(entityId, command)
@@ -249,7 +249,7 @@ object StatefulFlowRegistry {
       ): Future[Option[Result]] = control.commandWithResultOption(entityId, f)
   }
 
-  final private[spekka] class StatefulFlowLazyMultiControlImpl[Command](
+  final private[spekka] class StatefulFlowLazyControlImpl[Command](
       builder: StatefulFlowBuilder[_, _, Command]
     )(implicit ec: ExecutionContext)
       extends StatefulFlowLazyControl[Command] {
@@ -302,7 +302,8 @@ object StatefulFlowRegistry {
       } yield res
     }
 
-    override def narrow(entityId: String): StatefulFlowLazyEntityControl[Command] = ???
+    override def narrow(entityId: String): StatefulFlowLazyEntityControl[Command] =
+      new StatefulFlowLazyEntityControlImpl(this, "entityId")
   }
 
   final private[spekka] class StatefulFlowBuilderImpl[In, Out, Command](
@@ -359,13 +360,13 @@ object StatefulFlowRegistry {
       registry.makeControl(this, entityId)
 
     def lazyControl(implicit ec: ExecutionContext): StatefulFlowLazyControl[Command] =
-      new StatefulFlowLazyMultiControlImpl(this)
+      new StatefulFlowLazyControlImpl(this)
 
     def lazyEntityControl(
         entityId: String
       )(implicit ec: ExecutionContext
       ): StatefulFlowLazyEntityControl[Command] =
-      new StatefulFlowLazyMultiControlImpl(this).narrow(entityId)
+      new StatefulFlowLazyControlImpl(this).narrow(entityId)
   }
 
   private[spekka] object Protocol {
