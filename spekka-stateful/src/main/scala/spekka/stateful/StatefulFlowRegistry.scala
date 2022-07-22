@@ -302,7 +302,8 @@ object StatefulFlowRegistry {
       } yield res
     }
 
-    override def narrow(entityId: String): StatefulFlowLazyEntityControl[Command] = new StatefulFlowLazyEntityControlImpl(this, entityId)
+    override def narrow(entityId: String): StatefulFlowLazyEntityControl[Command] =
+      new StatefulFlowLazyEntityControlImpl(this, entityId)
   }
 
   final private[spekka] class StatefulFlowBuilderImpl[In, Out, Command](
