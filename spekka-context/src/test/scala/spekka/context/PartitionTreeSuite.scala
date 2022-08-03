@@ -249,4 +249,48 @@ class PartitionTreeBuilderSuite extends SpekkaSuite("PartitionTreeBuilderSuite")
     }
     dataSorted should contain theSameElementsAs expected
   }
+
+  test("tree branches depending on parent keys") {
+    val flow = Partition
+      .treeBuilder[Input, Long]
+      .dynamicAuto(_.k1)
+      .dynamicAuto(_.k2)
+      .dynamicManualCtxWithKeys(
+        (_, _, ks) =>
+          ks match {
+            case _ :@: 1 :@: KNil => "group1"
+            case _ :@: 2 :@: KNil => "group2"
+            case _ => throw new IllegalStateException("Unexpected")
+          },
+        {
+          case "a" :@: 1 :@: KNil => Set("group1")
+          case "b" :@: 2 :@: KNil => Set("group2")
+          case _ :@: _ :@: KNil => Set.empty[String]
+        }
+      )
+      .build {
+        case "group1" :@: _ :@: _ :@: KNil =>
+          FlowWithExtendedContext[Input, Long].map(_.toOutput("group1-B" :@: KNil))
+        case "group2" :@: _ =>
+          FlowWithExtendedContext[Input, Long].map(_.toOutput("group2-B" :@: KNil))
+        case _ => throw new IllegalStateException("Unexpected")
+      }
+
+    val inputs = List(
+      Input(1, "a", true, 1),
+      Input(2, "b", false, 2),
+      Input(1, "c", false, 3),
+      Input(2, "d", true, 4)
+    )
+
+    val expected = inputs.zipWithIndex.map { case (i, ctx) =>
+      if (i.k1 == 1 && i.k2 == "a") Some(Output("group1-B" :@: KNil, i)) -> ctx.toLong
+      else if (i.k1 == 2 && i.k2 == "b") Some(Output("group2-B" :@: KNil, i)) -> ctx.toLong
+      else None -> ctx.toLong
+    }
+
+    val (_, result) =
+      Source(inputs).zipWithIndex.viaMat(flow)(Keep.right).toMat(Sink.seq)(Keep.both).run()
+    result.futureValue should contain theSameElementsAs expected
+  }
 }
