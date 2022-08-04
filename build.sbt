@@ -33,7 +33,9 @@ lazy val commonSettings = Seq(
     "-Xfatal-warnings"
   ),
   libraryDependencies := Seq(
-    scalaTest % Test
+    scalaTest % Test,
+    // Needed to make PartitionTreeBuilder type resolution work
+    "org.scala-lang" % "scala-reflect" % scalaVersion.value
   ),
   headerLicense := Some(HeaderLicense.ALv2("2022", "Andrea Zito")),
   addCompilerPlugin(("org.typelevel" % "kind-projector" % "0.13.2").cross(CrossVersion.full))
