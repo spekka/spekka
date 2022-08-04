@@ -1144,7 +1144,7 @@ object StatefulFlowLogic {
       * @tparam Command
       *   the type of commands handled by this logic
       */
-    def apply[State, In, Out, Command](
+    def forEntity[State, In, Out, Command](
         initialStateF: (String, String) => Future[State],
         processInputF: (State, In) => Future[DurableState.ProcessingResult[State, Out]],
         processCommandF: (State, Command) => Future[DurableState.ProcessingResult[State, Nothing]]
