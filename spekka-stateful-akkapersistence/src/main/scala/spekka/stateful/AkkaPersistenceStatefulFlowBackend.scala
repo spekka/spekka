@@ -33,6 +33,7 @@ import org.slf4j.Logger
 import spekka.codec.Codec
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -643,7 +644,7 @@ object AkkaPersistenceStatefulFlowBackend {
       behaviorFactoryProto[State, Ev, In, Command](
         entityKind,
         entityId,
-        () => logic.initialState,
+        () => logic.initialState(entityKind, entityId),
         logic.updateState,
         retentionCriteria,
         storagePlugin,
@@ -870,30 +871,43 @@ object AkkaPersistenceStatefulFlowBackend {
         partitions: Int,
         sideEffectsParallelism: Int,
         eventAdapter: Option[EventAdapter[Ev, _]],
-        snapshotAdapter: Option[SnapshotAdapter[State]]
+        snapshotAdapter: Option[SnapshotAdapter[State]],
+        initializationTimeout: FiniteDuration
       ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, EventBased.AkkaPersistenceBackendProtocol]] = {
-      EventBased.behaviorFactoryProto[State, Ev, In, Command](
-        entityKind,
-        entityId,
-        () => logic.initialState,
-        logic.updateState,
-        retentionCriteria,
-        storagePlugin,
-        partitions,
-        sideEffectsParallelism,
-        eventAdapter,
-        snapshotAdapter,
-        (state, input, actorContext) =>
-          EventBased.handleInputAsync(state, input, logic, actorContext, sideEffectsParallelism),
-        (state, msg, actorContext) =>
-          EventBased
-            .handleInputImpl(state, msg.result, actorContext, msg.replyTo, sideEffectsParallelism),
-        (state, command, actorContext) =>
-          EventBased
-            .handleCommandAsync(state, command, logic, actorContext, sideEffectsParallelism),
-        (state, msg, actorContext) =>
-          EventBased.handleCommandImpl(state, msg.result, actorContext, sideEffectsParallelism)
-      )
+      StatefulFlowBackend.FutureBehavior(
+        initializationTimeout,
+        logic.initialState(entityKind, entityId)
+      ) { state =>
+        EventBased.behaviorFactoryProto[State, Ev, In, Command](
+          entityKind,
+          entityId,
+          () => state,
+          logic.updateState,
+          retentionCriteria,
+          storagePlugin,
+          partitions,
+          sideEffectsParallelism,
+          eventAdapter,
+          snapshotAdapter,
+          (state, input, actorContext) =>
+            EventBased.handleInputAsync(state, input, logic, actorContext, sideEffectsParallelism),
+          (state, msg, actorContext) =>
+            EventBased
+              .handleInputImpl(
+                state,
+                msg.result,
+                actorContext,
+                msg.replyTo,
+                sideEffectsParallelism
+              ),
+          (state, command, actorContext) =>
+            EventBased
+              .handleCommandAsync(state, command, logic, actorContext, sideEffectsParallelism),
+          (state, msg, actorContext) =>
+            EventBased.handleCommandImpl(state, msg.result, actorContext, sideEffectsParallelism)
+        )
+      }
+
     }
 
     /** Creates a new instance of [[AkkaPersistenceStatefulFlowBackend.EventBasedAsync]].
@@ -907,7 +921,7 @@ object AkkaPersistenceStatefulFlowBackend {
       * @param sideEffectsParallelism
       *   the number of side effects to execute concurrently
       * @return
-      *   [[EventBased]] instance
+      *   [[EventBasedAsync]] instance
       * @tparam State
       *   state type handled by this backend
       * @tparam Ev
@@ -917,7 +931,8 @@ object AkkaPersistenceStatefulFlowBackend {
         storagePlugin: EventBased.PersistencePlugin,
         retentionCriteria: RetentionCriteria = RetentionCriteria.disabled,
         eventsPartitions: Int = 1,
-        sideEffectsParallelism: Int = 1
+        sideEffectsParallelism: Int = 1,
+        initializationTimeout: FiniteDuration = 30.seconds
       ): EventBasedAsync[State, Ev] =
       new EventBasedAsync(
         storagePlugin,
@@ -925,7 +940,8 @@ object AkkaPersistenceStatefulFlowBackend {
         eventsPartitions,
         sideEffectsParallelism,
         None,
-        None
+        None,
+        initializationTimeout
       )
   }
 
@@ -938,7 +954,8 @@ object AkkaPersistenceStatefulFlowBackend {
       eventsPartitions: Int,
       sideEffectsParallelism: Int,
       eventAdapter: Option[EventAdapter[Ev, _]],
-      snapshotAdapter: Option[SnapshotAdapter[State]])
+      snapshotAdapter: Option[SnapshotAdapter[State]],
+      initializationTimeout: FiniteDuration)
       extends StatefulFlowBackend.EventBasedAsync[
         State,
         Ev,
@@ -960,7 +977,8 @@ object AkkaPersistenceStatefulFlowBackend {
         eventsPartitions,
         sideEffectsParallelism,
         eventAdapter,
-        snapshotAdapter
+        snapshotAdapter,
+        initializationTimeout
       )
 
     /** Changes the number of partitions to be used for event tagging.
@@ -979,7 +997,8 @@ object AkkaPersistenceStatefulFlowBackend {
         n,
         sideEffectsParallelism,
         eventAdapter,
-        snapshotAdapter
+        snapshotAdapter,
+        initializationTimeout
       )
 
     /** Changes the side effect parallelism.
@@ -996,7 +1015,8 @@ object AkkaPersistenceStatefulFlowBackend {
         eventsPartitions,
         n,
         eventAdapter,
-        snapshotAdapter
+        snapshotAdapter,
+        initializationTimeout
       )
 
     /** Allows the configuration of a custom event adapter.
@@ -1018,7 +1038,8 @@ object AkkaPersistenceStatefulFlowBackend {
         eventsPartitions,
         sideEffectsParallelism,
         Some(eventAdapter),
-        snapshotAdapter
+        snapshotAdapter,
+        initializationTimeout
       )
 
     /** Allows the configuration of a custom snapshot adapter.
@@ -1040,7 +1061,8 @@ object AkkaPersistenceStatefulFlowBackend {
         eventsPartitions,
         sideEffectsParallelism,
         eventAdapter,
-        Some(snapshotAdapter)
+        Some(snapshotAdapter),
+        initializationTimeout
       )
 
     /** Configures an explicit event codec to be used during serialization.
@@ -1061,7 +1083,8 @@ object AkkaPersistenceStatefulFlowBackend {
         eventsPartitions,
         sideEffectsParallelism,
         Some(new EventBased.SerializedDataEventAdapter(eventCodec)),
-        snapshotAdapter
+        snapshotAdapter,
+        initializationTimeout
       )
 
     /** Configures an explicit snapshot codec to be used during serialization.
@@ -1082,7 +1105,8 @@ object AkkaPersistenceStatefulFlowBackend {
         eventsPartitions,
         sideEffectsParallelism,
         eventAdapter,
-        Some(new SerializedDataSnapshotAdapter(snapshotCodec))
+        Some(new SerializedDataSnapshotAdapter(snapshotCodec)),
+        initializationTimeout
       )
   }
 
@@ -1542,7 +1566,7 @@ object AkkaPersistenceStatefulFlowBackend {
       behaviorFactoryProto[State, In, Out, Command](
         entityKind,
         entityId,
-        () => logic.initialState,
+        () => logic.initialState(entityKind, entityId),
         storagePlugin,
         sideEffectsParallelism,
         snapshotAdapter,
@@ -1668,27 +1692,45 @@ object AkkaPersistenceStatefulFlowBackend {
         logic: StatefulFlowLogic.DurableStateAsync[State, In, Out, Command],
         storagePlugin: DurableState.PersistencePlugin,
         sideEffectsParallelism: Int,
-        snapshotAdapter: Option[SnapshotAdapter[State]]
+        snapshotAdapter: Option[SnapshotAdapter[State]],
+        initializationTimeout: FiniteDuration
       ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, DurableState.AkkaPersistenceBackendProtocol]] = {
-      DurableState.behaviorFactoryProto[State, In, Out, Command](
-        entityKind,
-        entityId,
-        () => logic.initialState,
-        storagePlugin,
-        sideEffectsParallelism,
-        snapshotAdapter,
-        (state, flowInput, actorContext) =>
-          DurableState
-            .handleInputAsync(state, flowInput, logic, actorContext, sideEffectsParallelism),
-        (state, msg, actorContext) =>
-          DurableState
-            .handleInputImpl(state, msg.result, actorContext, msg.replyTo, sideEffectsParallelism),
-        (state, commandRequest, actorContext) =>
-          DurableState
-            .handleCommandAsync(state, commandRequest, logic, actorContext, sideEffectsParallelism),
-        (state, msg, actorContext) =>
-          DurableState.handleCommandImpl(state, msg.result, actorContext, sideEffectsParallelism)
-      )
+      StatefulFlowBackend.FutureBehavior(
+        initializationTimeout,
+        logic.initialState(entityKind, entityId)
+      ) { state =>
+        DurableState.behaviorFactoryProto[State, In, Out, Command](
+          entityKind,
+          entityId,
+          () => state,
+          storagePlugin,
+          sideEffectsParallelism,
+          snapshotAdapter,
+          (state, flowInput, actorContext) =>
+            DurableState
+              .handleInputAsync(state, flowInput, logic, actorContext, sideEffectsParallelism),
+          (state, msg, actorContext) =>
+            DurableState
+              .handleInputImpl(
+                state,
+                msg.result,
+                actorContext,
+                msg.replyTo,
+                sideEffectsParallelism
+              ),
+          (state, commandRequest, actorContext) =>
+            DurableState
+              .handleCommandAsync(
+                state,
+                commandRequest,
+                logic,
+                actorContext,
+                sideEffectsParallelism
+              ),
+          (state, msg, actorContext) =>
+            DurableState.handleCommandImpl(state, msg.result, actorContext, sideEffectsParallelism)
+        )
+      }
     }
 
     /** Creates a new instance of [[AkkaPersistenceStatefulFlowBackend.DurableStateAsync]].
@@ -1704,12 +1746,14 @@ object AkkaPersistenceStatefulFlowBackend {
       */
     def apply[State](
         storagePlugin: DurableState.PersistencePlugin,
-        sideEffectsParallelism: Int = 1
+        sideEffectsParallelism: Int = 1,
+        initializationTimeout: FiniteDuration = 30.seconds
       ): DurableStateAsync[State] =
       new DurableStateAsync(
         storagePlugin,
         sideEffectsParallelism,
-        None
+        None,
+        initializationTimeout
       )
   }
 
@@ -1719,7 +1763,8 @@ object AkkaPersistenceStatefulFlowBackend {
   class DurableStateAsync[State] private[spekka] (
       storagePlugin: DurableState.PersistencePlugin,
       sideEffectsParallelism: Int,
-      snapshotAdapter: Option[SnapshotAdapter[State]])
+      snapshotAdapter: Option[SnapshotAdapter[State]],
+      initializationTimeout: FiniteDuration)
       extends StatefulFlowBackend.DurableStateAsync[
         State,
         DurableState.AkkaPersistenceBackendProtocol
@@ -1737,7 +1782,8 @@ object AkkaPersistenceStatefulFlowBackend {
         logic,
         storagePlugin,
         sideEffectsParallelism,
-        snapshotAdapter
+        snapshotAdapter,
+        initializationTimeout
       )
 
     /** Changes the side effect parallelism.
@@ -1751,7 +1797,8 @@ object AkkaPersistenceStatefulFlowBackend {
       new DurableStateAsync(
         storagePlugin,
         n,
-        snapshotAdapter
+        snapshotAdapter,
+        initializationTimeout
       )
 
     /** Allows the configuration of a custom snapshot adapter.
@@ -1770,7 +1817,8 @@ object AkkaPersistenceStatefulFlowBackend {
       new DurableStateAsync[State](
         storagePlugin,
         sideEffectsParallelism,
-        Some(snapshotAdapter)
+        Some(snapshotAdapter),
+        initializationTimeout
       )
 
     /** Configures an explicit snapshot codec to be used during serialization.
@@ -1788,7 +1836,8 @@ object AkkaPersistenceStatefulFlowBackend {
       new DurableStateAsync[State](
         storagePlugin,
         sideEffectsParallelism,
-        Some(new SerializedDataSnapshotAdapter(snapshotCodec))
+        Some(new SerializedDataSnapshotAdapter(snapshotCodec)),
+        initializationTimeout
       )
   }
 }

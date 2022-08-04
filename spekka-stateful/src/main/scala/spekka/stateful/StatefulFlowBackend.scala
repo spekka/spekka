@@ -20,10 +20,14 @@ import akka.actor.typed.ActorRef
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 
+import java.util.concurrent.TimeoutException
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
+import scala.reflect.ClassTag
 import scala.util.Failure
 import scala.util.Success
+import scala.util.Try
 
 /** A [[StatefulFlowBackend]] is responsible of managing the persistence of the state of a stateful
   * flow.
@@ -291,7 +295,53 @@ object StatefulFlowBackend {
       else if (afterUpdateSideEffects.nonEmpty) handleAfterSideEffect()
       else success()
     }
+  }
 
+  private[spekka] object FutureBehavior {
+
+    case class FutureReady[V](result: Try[V])
+
+    def apply[T: ClassTag, V](
+        timeout: FiniteDuration,
+        future: Future[V]
+      )(f: V => Behavior[T]
+      ): Behavior[T] = {
+      Behaviors
+        .withStash[Any](Integer.MAX_VALUE) { stash =>
+          Behaviors.setup[Any] { ctx =>
+            val behaviorWithTimeoutF = Future.firstCompletedOf(
+              List(
+                future,
+                akka.pattern.after(timeout)(
+                  Future.failed(
+                    new TimeoutException(
+                      s"Timeout while waiting for behavior initialization: ${timeout}"
+                    )
+                  )
+                )(ctx.system)
+              )
+            )(ctx.executionContext)
+
+            ctx.pipeToSelf(behaviorWithTimeoutF)(FutureReady.apply)
+
+            Behaviors.receiveMessage[Any] {
+              case data: T =>
+                stash.stash(data)
+                Behaviors.same
+
+              case FutureReady(valueT: Try[V @unchecked]) =>
+                valueT match {
+                  case Success(v) => stash.unstashAll(f(v).asInstanceOf[Behavior[Any]])
+                  case Failure(ex) => throw ex
+                }
+
+              case _ =>
+                Behaviors.same
+            }
+          }
+        }
+        .narrow[T]
+    }
   }
 
 }

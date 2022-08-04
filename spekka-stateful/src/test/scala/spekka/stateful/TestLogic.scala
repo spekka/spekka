@@ -27,7 +27,7 @@ import akka.serialization.SerializerWithStringManifest
 
 import scala.collection.immutable
 import scala.concurrent.Future
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 
 case class TestState(lastTimestamp: Long, counter: Long)
 
@@ -160,7 +160,7 @@ object EventBasedTestLogicAsync {
     )(implicit system: ClassicActorSystem
     ) =
     StatefulFlowLogic.EventBasedAsync(
-      () => initState,
+      () => akka.pattern.after(100.millis)(Future.successful(initState)),
       (state: TestState, in: TestInput) =>
         akka.pattern.after(processingDelay)(
           Future.successful(
@@ -251,7 +251,7 @@ object DurableStateTestLogicAsync {
     )(implicit system: ClassicActorSystem
     ) =
     StatefulFlowLogic.DurableStateAsync(
-      () => initState,
+      () => akka.pattern.after(100.millis)(Future.successful(initState)),
       (state: TestState, in: TestInput) =>
         akka.pattern.after(processingDelay)(
           Future.successful(
