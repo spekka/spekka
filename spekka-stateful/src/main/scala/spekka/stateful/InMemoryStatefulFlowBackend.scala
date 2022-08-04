@@ -22,6 +22,8 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.pattern.StatusReply
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -98,6 +100,8 @@ object InMemoryStatefulFlowBackend {
   object EventBased {
     private[spekka] def behaviorFactory[State, Ev, In, Command](
         logic: StatefulFlowLogic.EventBased[State, Ev, In, Command],
+        entityKind: String,
+        entityId: String,
         stashBufferSize: Int
       ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendProtocol]] = {
 
@@ -157,7 +161,7 @@ object InMemoryStatefulFlowBackend {
         }
       }
 
-      behavior(logic.initialState)
+      behavior(logic.initialState(entityKind, entityId))
     }
 
     /** Creates a new instance of [[InMemoryStatefulFlowBackend.EventBased]].
@@ -182,14 +186,17 @@ object InMemoryStatefulFlowBackend {
             entityKind: String,
             entityId: String
           ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendProtocol]] =
-          behaviorFactory(logic, sideEffectBufferSize)
+          behaviorFactory(logic, entityKind, entityId, sideEffectBufferSize)
       }
   }
 
   object EventBasedAsync {
     private[spekka] def behaviorFactory[State, Ev, In, Command](
         logic: StatefulFlowLogic.EventBasedAsync[State, Ev, In, Command],
-        stashBufferSize: Int
+        entityKind: String,
+        entityId: String,
+        stashBufferSize: Int,
+        initializationTimeout: FiniteDuration
       ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]] = {
 
       def handleInput(
@@ -365,22 +372,26 @@ object InMemoryStatefulFlowBackend {
         }
       }
 
-      behavior(logic.initialState)
+      StatefulFlowBackend.FutureBehavior(
+        initializationTimeout,
+        logic.initialState(entityKind, entityId)
+      )(behavior(_))
     }
 
-    /** Creates a new instance of [[InMemoryStatefulFlowBackend.EventBased]].
+    /** Creates a new instance of [[InMemoryStatefulFlowBackend.EventBasedAsync]].
       *
       * @param sideEffectBufferSize
       *   Size of the buffer for stashing messages while performing side effects
       * @return
-      *   [[StatefulFlowBackend.EventBased]] instance
+      *   [[StatefulFlowBackend.EventBasedAsync]] instance
       * @tparam State
       *   state type handled by this backend
       * @tparam Ev
       *   events type handled by this backend
       */
     def apply[State, Ev](
-        sideEffectBufferSize: Int = 128
+        sideEffectBufferSize: Int = 128,
+        initializationTimeout: FiniteDuration = 30.seconds
       ): StatefulFlowBackend.EventBasedAsync[State, Ev, InMemoryBackendAsyncProtocol] =
       new StatefulFlowBackend.EventBasedAsync[State, Ev, InMemoryBackendAsyncProtocol] {
         override val id: String = "in-memory-event-based-async"
@@ -390,7 +401,13 @@ object InMemoryStatefulFlowBackend {
             entityKind: String,
             entityId: String
           ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, InMemoryBackendAsyncProtocol]] =
-          behaviorFactory(logic, sideEffectBufferSize)
+          behaviorFactory(
+            logic,
+            entityKind: String,
+            entityId: String,
+            sideEffectBufferSize,
+            initializationTimeout
+          )
       }
   }
 
@@ -399,6 +416,8 @@ object InMemoryStatefulFlowBackend {
   object DurableState {
     private[spekka] def behaviorFactory[State, In, Out, Command](
         logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
+        entityKind: String,
+        entityId: String,
         stashBufferSize: Int
       ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendProtocol]] = {
 
@@ -456,7 +475,7 @@ object InMemoryStatefulFlowBackend {
         }
       }
 
-      behavior(logic.initialState)
+      behavior(logic.initialState(entityKind, entityId))
     }
 
     /** Creates a new instance of [[InMemoryStatefulFlowBackend.DurableState]].
@@ -479,14 +498,17 @@ object InMemoryStatefulFlowBackend {
             entityKind: String,
             entityId: String
           ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendProtocol]] =
-          behaviorFactory(logic, sideEffectBufferSize)
+          behaviorFactory(logic, entityKind, entityId, sideEffectBufferSize)
       }
   }
 
   object DurableStateAsync {
     private[spekka] def behaviorFactory[State, In, Out, Command](
         logic: StatefulFlowLogic.DurableStateAsync[State, In, Out, Command],
-        stashBufferSize: Int
+        entityKind: String,
+        entityId: String,
+        stashBufferSize: Int,
+        initializationTimeout: FiniteDuration
       ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendAsyncProtocol]] = {
 
       def handleInput(
@@ -660,20 +682,24 @@ object InMemoryStatefulFlowBackend {
         }
       }
 
-      behavior(logic.initialState)
+      StatefulFlowBackend.FutureBehavior(
+        initializationTimeout,
+        logic.initialState(entityKind, entityId)
+      )(behavior(_))
     }
 
-    /** Creates a new instance of [[InMemoryStatefulFlowBackend.DurableState]].
+    /** Creates a new instance of [[InMemoryStatefulFlowBackend.DurableStateAsync]].
       *
       * @param sideEffectBufferSize
       *   Size of the buffer for stashing messages while performing side effects
       * @return
-      *   [[StatefulFlowBackend.DurableState]] instance
+      *   [[StatefulFlowBackend.DurableStateAsync]] instance
       * @tparam State
       *   state type handled by this backend
       */
     def apply[State](
-        sideEffectBufferSize: Int = 128
+        sideEffectBufferSize: Int = 128,
+        initializationTimeout: FiniteDuration = 30.seconds
       ): StatefulFlowBackend.DurableStateAsync[State, InMemoryBackendAsyncProtocol] =
       new StatefulFlowBackend.DurableStateAsync[State, InMemoryBackendAsyncProtocol] {
         override val id: String = "in-memory-durable-state-async"
@@ -683,7 +709,7 @@ object InMemoryStatefulFlowBackend {
             entityKind: String,
             entityId: String
           ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, InMemoryBackendAsyncProtocol]] =
-          behaviorFactory(logic, sideEffectBufferSize)
+          behaviorFactory(logic, entityKind, entityId, sideEffectBufferSize, initializationTimeout)
       }
   }
 }
