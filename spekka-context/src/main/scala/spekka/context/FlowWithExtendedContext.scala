@@ -428,6 +428,43 @@ object FlowWithExtendedContext extends FlowWithExtendedContextSyntax {
     zipFlow.asFlowWithExtendedContextUnsafe
   }
 
+  /** Defers invoking the create function to create a future flow until there is downstream demand
+    * and passing that downstream demand upstream triggers the first element.
+    *
+    * The materialized future value is completed with the materialized value of the created flow
+    * when that has successfully been materialized.
+    *
+    * If the create function throws or returns a future that fails the stream is failed, in this
+    * case the materialized future value is failed with a NeverMaterializedException.
+    *
+    * Note that asynchronous boundaries (and other operators) in the stream may do pre-fetching
+    * which counter acts the laziness and can trigger the factory earlier than expected.
+    */
+  def lazyFlow[In, Out, Ctx, M](
+      create: () => FlowWithExtendedContext[In, Out, Ctx, M]
+    ) = {
+    Flow.lazyFlow(() => create().toFlow).asFlowWithExtendedContextUnsafe
+  }
+
+  /** Defers invoking the create function to create a future flow until there downstream demand has
+    * caused upstream to send a first element.
+    *
+    * The materialized future value is completed with the materialized value of the created flow
+    * when that has successfully been materialized.
+    *
+    * If the create function throws or returns a future that fails the stream is failed, in this
+    * case the materialized future value is failed with a NeverMaterializedException.
+    *
+    * Note that asynchronous boundaries (and other operators) in the stream may do pre-fetching
+    * which counter acts the laziness and can trigger the factory earlier than expected.
+    */
+  def lazyFutureFlow[In, Out, Ctx, M](
+      create: () => Future[FlowWithExtendedContext[In, Out, Ctx, M]]
+    ): FlowWithExtendedContext[In, Out, Ctx, Future[M]] = {
+    implicit val ec = scala.concurrent.ExecutionContext.parasitic
+    Flow.lazyFutureFlow(() => create().map(_.toFlow)).asFlowWithExtendedContextUnsafe
+  }
+
   /** Object containing the implicit conversions needed to work with [[FlowWithExtendedContext]].
     *
     * Most of the implicit needed for working with [[FlowWithExtendedContext]] are automatically
