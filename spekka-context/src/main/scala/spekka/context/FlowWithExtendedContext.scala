@@ -20,17 +20,17 @@ import akka.NotUsed
 import akka.stream.Attributes
 import akka.stream.FlowShape
 import akka.stream.Graph
+import akka.stream.scaladsl.Broadcast
 import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.FlowWithContext
+import akka.stream.scaladsl.GraphDSL
 import akka.stream.scaladsl.Keep
+import akka.stream.scaladsl.Zip
 import spekka.context.internal._
 
 import scala.collection.immutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
-import akka.stream.scaladsl.GraphDSL
-import akka.stream.scaladsl.Broadcast
-import akka.stream.scaladsl.Zip
 
 /** Provides the implicit conversions needed to make [[FlowWithExtendedContext]] interoperatee with
   * standard akka flows.

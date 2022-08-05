@@ -19,10 +19,10 @@ package spekka.context
 import akka.NotUsed
 import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.FlowWithContext
+import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Source
 import akka.stream.testkit.scaladsl.TestSink
 import spekka.test.SpekkaSuite
-import akka.stream.scaladsl.Keep
 
 class FlowWithExtendedContextSuite
     extends SpekkaSuite(
