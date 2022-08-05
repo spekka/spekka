@@ -28,6 +28,9 @@ import spekka.context.internal._
 import scala.collection.immutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
+import akka.stream.scaladsl.GraphDSL
+import akka.stream.scaladsl.Broadcast
+import akka.stream.scaladsl.Zip
 
 /** Provides the implicit conversions needed to make [[FlowWithExtendedContext]] interoperatee with
   * standard akka flows.
@@ -137,6 +140,293 @@ object FlowWithExtendedContext extends FlowWithExtendedContextSyntax {
   def fromGraphUnsafe[In, Out, Ctx, M](
       graph: Graph[FlowShape[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx])], M]
     ): FlowWithExtendedContext[In, Out, Ctx, M] = new FlowWithExtendedContext(graph)
+
+  /** Zips two [[FlowWithExtendedContext]] in a single [[FlowWithExtendedContext]] by tupling the
+    * outputs and the materialized values.
+    *
+    * It is the responsibility of the caller to ensure that all the flows adhere to the
+    * [[FlowWithExtendedContext]] contract.
+    */
+  def zip[In, Out1, Out2, Ctx, M1, M2](
+      flow1: FlowWithExtendedContext[In, Out1, Ctx, M1],
+      flow2: FlowWithExtendedContext[In, Out2, Ctx, M2]
+    ): FlowWithExtendedContext[In, (Out1, Out2), Ctx, (M1, M2)] = {
+    val zipFlow = Flow.fromGraph(
+      GraphDSL.createGraph(flow1.toGraph, flow2.toGraph)((m1, m2) => (m1, m2)) { implicit builder =>
+        import GraphDSL.Implicits._
+        { case (f1, f2) =>
+          val bcast = builder.add(Broadcast[(In, ExtendedContext[Ctx])](2, true))
+          val zip = builder.add(Zip[(Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])]())
+
+          bcast.outlets.zip(List(f1, f2)).foreach { case (port, f) =>
+            port ~> f
+          }
+
+          f1 ~> zip.in0
+          f2 ~> zip.in1
+
+          val adapter = builder.add {
+            Flow[((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx]))].map {
+              case ((o1, ctx), (o2, _)) => (o1, o2) -> ctx
+            }
+          }
+
+          zip.out ~> adapter
+
+          FlowShape(bcast.in, adapter.out)
+        }
+      }
+    )
+
+    zipFlow.asFlowWithExtendedContextUnsafe
+  }
+
+  /** Zips three [[FlowWithExtendedContext]] in a single [[FlowWithExtendedContext]] by tupling the
+    * outputs and the materialized values.
+    *
+    * It is the responsibility of the caller to ensure that all the flows adhere to the
+    * [[FlowWithExtendedContext]] contract.
+    */
+  def zip[In, Out1, Out2, Out3, Ctx, M1, M2, M3](
+      flow1: FlowWithExtendedContext[In, Out1, Ctx, M1],
+      flow2: FlowWithExtendedContext[In, Out2, Ctx, M2],
+      flow3: FlowWithExtendedContext[In, Out3, Ctx, M3]
+    ): FlowWithExtendedContext[In, (Out1, Out2, Out3), Ctx, (M1, M2, M3)] = {
+    val zipFlow = Flow.fromGraph(
+      GraphDSL.createGraph(flow1.toGraph, flow2.toGraph, flow3.toGraph)((m1, m2, m3) =>
+        (m1, m2, m3)
+      ) { implicit builder =>
+        import GraphDSL.Implicits._
+        { case (f1, f2, f3) =>
+          val bcast = builder.add(Broadcast.apply[(In, ExtendedContext[Ctx])](3, true))
+
+          val zip1 = builder.add(Zip[(Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])]())
+          val zip2 = builder.add(
+            Zip[
+              (
+                  (Out1, ExtendedContext[Ctx]),
+                  (Out2, ExtendedContext[Ctx])
+              ),
+              (Out3, ExtendedContext[Ctx])
+            ]()
+          )
+
+          bcast.outlets.zip(List(f1, f2, f3)).foreach { case (port, f) =>
+            port ~> f
+          }
+
+          f1 ~> zip1.in0
+          f2 ~> zip1.in1
+
+          zip1.out ~> zip2.in0
+          f3 ~> zip2.in1
+
+          val adapter = builder.add {
+            Flow[
+              (
+                  ((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
+                  (Out3, ExtendedContext[Ctx])
+              )
+            ].map { case (((o1, ctx), (o2, _)), (o3, _)) =>
+              (o1, o2, o3) -> ctx
+            }
+          }
+
+          zip2.out ~> adapter
+
+          FlowShape(bcast.in, adapter.out)
+        }
+      }
+    )
+
+    zipFlow.asFlowWithExtendedContextUnsafe
+  }
+
+  /** Zips four [[FlowWithExtendedContext]] in a single [[FlowWithExtendedContext]] by tupling the
+    * outputs and the materialized values.
+    *
+    * It is the responsibility of the caller to ensure that all the flows adhere to the
+    * [[FlowWithExtendedContext]] contract.
+    */
+  def zip[In, Out1, Out2, Out3, Out4, Ctx, M1, M2, M3, M4](
+      flow1: FlowWithExtendedContext[In, Out1, Ctx, M1],
+      flow2: FlowWithExtendedContext[In, Out2, Ctx, M2],
+      flow3: FlowWithExtendedContext[In, Out3, Ctx, M3],
+      flow4: FlowWithExtendedContext[In, Out4, Ctx, M4]
+    ): FlowWithExtendedContext[In, (Out1, Out2, Out3, Out4), Ctx, (M1, M2, M3, M4)] = {
+    val zipFlow = Flow.fromGraph(
+      GraphDSL.createGraph(flow1.toGraph, flow2.toGraph, flow3.toGraph, flow4.toGraph)(
+        (m1, m2, m3, m4) => (m1, m2, m3, m4)
+      ) { implicit builder =>
+        import GraphDSL.Implicits._
+        { case (f1, f2, f3, f4) =>
+          val bcast = builder.add(Broadcast.apply[(In, ExtendedContext[Ctx])](4, true))
+
+          val zip1 = builder.add(Zip[(Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])]())
+          val zip2 = builder.add(
+            Zip[
+              (
+                  (Out1, ExtendedContext[Ctx]),
+                  (Out2, ExtendedContext[Ctx])
+              ),
+              (Out3, ExtendedContext[Ctx])
+            ]()
+          )
+          val zip3 = builder.add(
+            Zip[
+              (
+                  (
+                      (Out1, ExtendedContext[Ctx]),
+                      (Out2, ExtendedContext[Ctx])
+                  ),
+                  (Out3, ExtendedContext[Ctx])
+              ),
+              (Out4, ExtendedContext[Ctx])
+            ]()
+          )
+
+          bcast.outlets.zip(List(f1, f2, f3, f4)).foreach { case (port, f) =>
+            port ~> f
+          }
+
+          f1 ~> zip1.in0
+          f2 ~> zip1.in1
+
+          zip1.out ~> zip2.in0
+          f3 ~> zip2.in1
+
+          zip2.out ~> zip3.in0
+          f4 ~> zip3.in1
+
+          val adapter = builder.add {
+            Flow[
+              (
+                  (
+                      ((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
+                      (Out3, ExtendedContext[Ctx])
+                  ),
+                  (Out4, ExtendedContext[Ctx])
+              )
+            ].map { case ((((o1, ctx), (o2, _)), (o3, _)), (o4, _)) =>
+              (o1, o2, o3, o4) -> ctx
+            }
+          }
+
+          zip3.out ~> adapter
+
+          FlowShape(bcast.in, adapter.out)
+        }
+      }
+    )
+
+    zipFlow.asFlowWithExtendedContextUnsafe
+  }
+
+  /** Zips five [[FlowWithExtendedContext]] in a single [[FlowWithExtendedContext]] by tupling the
+    * outputs and the materialized values.
+    *
+    * It is the responsibility of the caller to ensure that all the flows adhere to the
+    * [[FlowWithExtendedContext]] contract.
+    */
+  def zip[In, Out1, Out2, Out3, Out4, Out5, Ctx, M1, M2, M3, M4, M5](
+      flow1: FlowWithExtendedContext[In, Out1, Ctx, M1],
+      flow2: FlowWithExtendedContext[In, Out2, Ctx, M2],
+      flow3: FlowWithExtendedContext[In, Out3, Ctx, M3],
+      flow4: FlowWithExtendedContext[In, Out4, Ctx, M4],
+      flow5: FlowWithExtendedContext[In, Out5, Ctx, M5]
+    ): FlowWithExtendedContext[In, (Out1, Out2, Out3, Out4, Out5), Ctx, (M1, M2, M3, M4, M5)] = {
+    val zipFlow = Flow.fromGraph(
+      GraphDSL.createGraph(
+        flow1.toGraph,
+        flow2.toGraph,
+        flow3.toGraph,
+        flow4.toGraph,
+        flow5.toGraph
+      )((m1, m2, m3, m4, m5) => (m1, m2, m3, m4, m5)) { implicit builder =>
+        import GraphDSL.Implicits._
+        { case (f1, f2, f3, f4, f5) =>
+          val bcast = builder.add(Broadcast.apply[(In, ExtendedContext[Ctx])](5, true))
+
+          val zip1 = builder.add(Zip[(Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])]())
+          val zip2 = builder.add(
+            Zip[
+              (
+                  (Out1, ExtendedContext[Ctx]),
+                  (Out2, ExtendedContext[Ctx])
+              ),
+              (Out3, ExtendedContext[Ctx])
+            ]()
+          )
+          val zip3 = builder.add(
+            Zip[
+              (
+                  (
+                      (Out1, ExtendedContext[Ctx]),
+                      (Out2, ExtendedContext[Ctx])
+                  ),
+                  (Out3, ExtendedContext[Ctx])
+              ),
+              (Out4, ExtendedContext[Ctx])
+            ]()
+          )
+          val zip4 = builder.add(
+            Zip[
+              (
+                  (
+                      (
+                          (Out1, ExtendedContext[Ctx]),
+                          (Out2, ExtendedContext[Ctx])
+                      ),
+                      (Out3, ExtendedContext[Ctx])
+                  ),
+                  (Out4, ExtendedContext[Ctx])
+              ),
+              (Out5, ExtendedContext[Ctx])
+            ]()
+          )
+
+          bcast.outlets.zip(List(f1, f2, f3, f4, f5)).foreach { case (port, f) =>
+            port ~> f
+          }
+
+          f1 ~> zip1.in0
+          f2 ~> zip1.in1
+
+          zip1.out ~> zip2.in0
+          f3 ~> zip2.in1
+
+          zip2.out ~> zip3.in0
+          f4 ~> zip3.in1
+
+          zip3.out ~> zip4.in0
+          f5 ~> zip4.in1
+
+          val adapter = builder.add {
+            Flow[
+              (
+                  (
+                      (
+                          ((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
+                          (Out3, ExtendedContext[Ctx])
+                      ),
+                      (Out4, ExtendedContext[Ctx])
+                  ),
+                  (Out5, ExtendedContext[Ctx])
+              )
+            ].map { case (((((o1, ctx), (o2, _)), (o3, _)), (o4, _)), (o5, _)) =>
+              (o1, o2, o3, o4, o5) -> ctx
+            }
+          }
+
+          zip4.out ~> adapter
+
+          FlowShape(bcast.in, adapter.out)
+        }
+      }
+    )
+
+    zipFlow.asFlowWithExtendedContextUnsafe
+  }
 
   /** Object containing the implicit conversions needed to work with [[FlowWithExtendedContext]].
     *
