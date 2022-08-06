@@ -49,18 +49,18 @@ lazy val `spekka-docs` = project
   .settings(
     Compile / paradoxMaterialTheme ~= {
       _.withRepository(uri("https://github.com/spekka/spekka"))
-      .withCopyright("Copyright © Andrea Zito")
-      .withLogoIcon("polymer")
-      .withSocial(
-        uri("https://github.com/nivox"),
-        uri("https://twitter.com/nivox"),
-        uri("https://linkedin.com/in/andreazito")
-      )
-      .withoutSearch()
-      .withGoogleAnalytics("G-H13X389S63")
+        .withCopyright("Copyright © Andrea Zito")
+        .withLogoIcon("polymer")
+        .withSocial(
+          uri("https://github.com/nivox"),
+          uri("https://twitter.com/nivox"),
+          uri("https://linkedin.com/in/andreazito")
+        )
+        .withoutSearch()
+        .withGoogleAnalytics("G-H13X389S63")
     },
     previewLaunchBrowser := false,
-    //paradoxTheme := Some(builtinParadoxTheme("generic")),
+    // paradoxTheme := Some(builtinParadoxTheme("generic")),
     gitHubPagesOrgName := "spekka",
     gitHubPagesRepoName := "spekka.github.io",
     gitHubPagesSiteDir := target.value / "paradox" / "site" / "main",
@@ -76,7 +76,8 @@ lazy val `spekka-docs` = project
       `akka-stream` % Provided,
       `akka-stream-typed` % Provided
     )
-  ).dependsOn(
+  )
+  .dependsOn(
     `spekka-context`,
     `spekka-stateful`
   )
@@ -102,7 +103,7 @@ lazy val `spekka-codec` = project
   .settings(
     libraryDependencies ++= Seq(
       // Should not be needed but sbt complains if no dependency is listed
-      "org.scala-lang" % "scala-library" % scalaVersion.value % Provided,
+      "org.scala-lang" % "scala-library" % scalaVersion.value % Provided
     ),
     crossScalaVersions := scalaVersions
   )
