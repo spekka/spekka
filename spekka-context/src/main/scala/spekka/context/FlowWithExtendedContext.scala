@@ -117,7 +117,9 @@ trait FlowWithExtendedContextSyntax {
   }
 }
 
-object FlowWithExtendedContext extends FlowWithExtendedContextSyntax with FlowWithExtendedContextVersionedExtensions {
+object FlowWithExtendedContext
+    extends FlowWithExtendedContextSyntax
+    with FlowWithExtendedContextVersionedExtensions {
 
   /** Creates a [[FlowWithExtendedContext]] for the given input and context types.
     */
