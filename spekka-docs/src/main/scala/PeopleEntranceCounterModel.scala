@@ -45,7 +45,8 @@ object PeopleEntranceCounterModel {
       deploymentId: DeploymentId,
       entranceId: EntranceId,
       timestamp: Long,
-      entrances: Int)
+      entrances: Int
+    )
 
   // #definitions
 
@@ -73,7 +74,7 @@ object PeopleEntranceCounterModel {
       dspec <- deploymentSpecs.iterator
       entrance <- Iterator.range(0, dspec.entrancesNr)
       value = dspec.entrancesPerSecond
-    } yield (CounterSample(DeploymentId(dspec.id), EntranceId(entrance), ts, value))
+    } yield CounterSample(DeploymentId(dspec.id), EntranceId(entrance), ts, value)
   }
 
   /** Helper function to generate a counter samples source for the specified deployments and

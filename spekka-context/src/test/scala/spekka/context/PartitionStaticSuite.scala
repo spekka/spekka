@@ -125,7 +125,7 @@ class PartitionStaticSuite
         puFlow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => -1)
       )(
         1 -> p1Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 1),
-        2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue((_ => 2))
+        2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 2)
       )
 
       val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }
@@ -150,7 +150,7 @@ class PartitionStaticSuite
         puFlow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => -1)
       )(
         1 -> p1Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 1),
-        2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue((_ => 2))
+        2 -> p2Flow.asFlowWithExtendedContextUnsafe.mapMaterializedValue(_ => 2)
       )
 
       val src = Source(1 to 100).zipWithIndex.map { case (v, ctx) => v -> ExtendedContext(ctx) }

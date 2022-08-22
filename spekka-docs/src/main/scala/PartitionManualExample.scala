@@ -87,9 +87,11 @@ object PartitionManualExample extends App {
         control: PartitionControl.DynamicControl[
           DeploymentId,
           PartitionControl.DynamicControl[EntranceId, AtomicReference[Int]]
-        ])
+        ]
+      )
     case class ByDeployment(
-        control: PartitionControl.DynamicControl[DeploymentId, AtomicReference[Int]])
+        control: PartitionControl.DynamicControl[DeploymentId, AtomicReference[Int]]
+      )
   }
   val combinedFlow = Partition
     .treeBuilder[CounterSample, Offset]

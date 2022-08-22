@@ -207,8 +207,8 @@ class AkkaPersistenceStatefulFlowSuite
       .toMat(Sink.seq)(Keep.both)
       .run()
 
-    inputSideEffectsProbe.expectMsg(("before" -> 4L))
-    inputSideEffectsProbe.expectMsg(("after" -> 4L))
+    inputSideEffectsProbe.expectMsg("before" -> 4L)
+    inputSideEffectsProbe.expectMsg("after" -> 4L)
 
     val events = resF.futureValue.flatten
     val control = controlF.futureValue
@@ -312,8 +312,8 @@ class AkkaPersistenceStatefulFlowSuite
       .toMat(Sink.seq)(Keep.both)
       .run()
 
-    inputSideEffectsProbe.expectMsg(("before" -> 4L))
-    inputSideEffectsProbe.expectMsg(("after" -> 4L))
+    inputSideEffectsProbe.expectMsg("before" -> 4L)
+    inputSideEffectsProbe.expectMsg("after" -> 4L)
 
     val events = resF.futureValue.flatten
     val control = controlF.futureValue
@@ -473,8 +473,8 @@ class AkkaPersistenceStatefulFlowSuite
         .toMat(Sink.seq)(Keep.both)
         .run()
 
-      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
-      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg("before" -> 4L)
+      _ = inputSideEffectsProbe.expectMsg("after" -> 4L)
 
       res <- resF
       control <- controlF
@@ -565,8 +565,8 @@ class AkkaPersistenceStatefulFlowSuite
         .toMat(Sink.seq)(Keep.both)
         .run()
 
-      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
-      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg("before" -> 4L)
+      _ = inputSideEffectsProbe.expectMsg("after" -> 4L)
 
       res <- resF
       control <- controlF

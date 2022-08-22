@@ -100,8 +100,8 @@ class InMemoryStatefulFlowSuite
         .toMat(Sink.seq)(Keep.both)
         .run()
 
-      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
-      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg("before" -> 4L)
+      _ = inputSideEffectsProbe.expectMsg("after" -> 4L)
 
       res <- resF
       control <- controlF
@@ -157,8 +157,8 @@ class InMemoryStatefulFlowSuite
         .toMat(Sink.seq)(Keep.both)
         .run()
 
-      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
-      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg("before" -> 4L)
+      _ = inputSideEffectsProbe.expectMsg("after" -> 4L)
 
       res <- resF
       control <- controlF
@@ -237,8 +237,8 @@ class InMemoryStatefulFlowSuite
         .toMat(Sink.seq)(Keep.both)
         .run()
 
-      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
-      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg("before" -> 4L)
+      _ = inputSideEffectsProbe.expectMsg("after" -> 4L)
 
       res <- resF
       control <- controlF
@@ -293,8 +293,8 @@ class InMemoryStatefulFlowSuite
         .toMat(Sink.seq)(Keep.both)
         .run()
 
-      _ = inputSideEffectsProbe.expectMsg(("before" -> 4L))
-      _ = inputSideEffectsProbe.expectMsg(("after" -> 4L))
+      _ = inputSideEffectsProbe.expectMsg("before" -> 4L)
+      _ = inputSideEffectsProbe.expectMsg("after" -> 4L)
 
       res <- resF
       control <- controlF
