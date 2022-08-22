@@ -5,7 +5,7 @@ lazy val scalaVersions = List("2.12.15", "2.13.8")
 ThisBuild / scalaVersion := "2.13.8"
 ThisBuild / organization := "io.github.spekka"
 
-ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.5.0"
+ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.6.0"
 ThisBuild / semanticdbEnabled := true
 ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 
