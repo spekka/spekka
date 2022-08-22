@@ -20,8 +20,7 @@ import scala.concurrent.Future
 import akka.stream.scaladsl.Flow
 import scala.concurrent.ExecutionContext
 
-/**
-  * Extension to [[FlowWithExtendedContext]] for Scala 2.12
+/** Extension to [[FlowWithExtendedContext]] for Scala 2.12
   */
 trait FlowWithExtendedContextVersionedExtensions {
   import FlowWithExtendedContext.syntax._
@@ -40,7 +39,8 @@ trait FlowWithExtendedContextVersionedExtensions {
     */
   def lazyFutureFlow[In, Out, Ctx, M](
       create: () => Future[FlowWithExtendedContext[In, Out, Ctx, M]]
-    )(implicit ec: ExecutionContext): FlowWithExtendedContext[In, Out, Ctx, Future[M]] = {
+    )(implicit ec: ExecutionContext
+    ): FlowWithExtendedContext[In, Out, Ctx, Future[M]] = {
     Flow.lazyFutureFlow(() => create().map(_.toFlow)).asFlowWithExtendedContextUnsafe
   }
 }

@@ -60,7 +60,7 @@ lazy val `spekka-docs` = project
         .withGoogleAnalytics("G-H13X389S63")
     },
     previewLaunchBrowser := false,
-    //paradoxTheme := Some(builtinParadoxTheme("generic")),
+    // paradoxTheme := Some(builtinParadoxTheme("generic")),
     gitHubPagesOrgName := "spekka",
     gitHubPagesRepoName := "spekka.github.io",
     gitHubPagesSiteDir := target.value / "paradox" / "site" / "main",
