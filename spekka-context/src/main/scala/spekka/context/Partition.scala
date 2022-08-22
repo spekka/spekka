@@ -50,7 +50,8 @@ object PartitionDynamic {
   case class CompletionCriteria[-In, -Out, Ctx] private (
       completeOnInput: Option[(In, Ctx) => Boolean],
       completeOnOutput: Option[(Out, Ctx) => Boolean],
-      completeOnIdle: Option[FiniteDuration]) {
+      completeOnIdle: Option[FiniteDuration]
+    ) {
     private[spekka] def shouldCompleteOnInput(in: In, ctx: ExtendedContext[Ctx]): Boolean =
       completeOnInput.map(_.apply(in, ctx.innerContext)).getOrElse(false)
     private[spekka] def shouldCompleteOnOutput(out: Out, ctx: ExtendedContext[Ctx]): Boolean =
@@ -102,7 +103,8 @@ object PartitionDynamic {
       spawnKeyCallback: AsyncCallback[(K, Promise[M])],
       completeKeyCallback: AsyncCallback[(K, Promise[Done])],
       recreateKeyCallback: AsyncCallback[(K, Promise[(Option[M], M)])],
-      withMaterializedValueCallback: AsyncCallback[(K, M => Any, Promise[Option[Any]])]) {
+      withMaterializedValueCallback: AsyncCallback[(K, M => Any, Promise[Option[Any]])]
+    ) {
 
     /** Returns the currently materialized partition keys.
       * @return

@@ -49,8 +49,8 @@ private[spekka] object PartitionDynamicInternal {
     case class SinglePartitioner[In, Out, Ctx, K, M](
         keyF: (In, Ctx) => K,
         flowF: K => FlowWithExtendedContext[In, Out, Ctx, M],
-        passthroughFlow: FlowWithExtendedContext[In, Out, Ctx, _])
-        extends Partitioner[In, Out, Ctx, K, M] {
+        passthroughFlow: FlowWithExtendedContext[In, Out, Ctx, _]
+      ) extends Partitioner[In, Out, Ctx, K, M] {
       override def flowForKey(key: K): FlowWithExtendedContext[In, Out, Ctx, M] = flowF(key)
       override def flowForContextPassthrough: FlowWithExtendedContext[In, Out, Ctx, _] =
         passthroughFlow
@@ -59,8 +59,8 @@ private[spekka] object PartitionDynamicInternal {
     case class MultiPartitioner[In, Out, Ctx, K, M](
         keyF: (In, Ctx, Set[K]) => Set[K],
         flowF: K => FlowWithExtendedContext[In, Out, Ctx, M],
-        passthroughFlow: FlowWithExtendedContext[In, Out, Ctx, _])
-        extends Partitioner[In, Out, Ctx, K, M] {
+        passthroughFlow: FlowWithExtendedContext[In, Out, Ctx, _]
+      ) extends Partitioner[In, Out, Ctx, K, M] {
       override def flowForKey(key: K): FlowWithExtendedContext[In, Out, Ctx, M] = flowF(key)
       override def flowForContextPassthrough: FlowWithExtendedContext[In, Out, Ctx, _] =
         passthroughFlow
@@ -72,8 +72,8 @@ private[spekka] object PartitionDynamicInternal {
       completionCriteria: CompletionCriteria[In, Out, Ctx],
       partitionAutoCreation: Boolean,
       bufferSize: Int,
-      initialKeys: Set[K])
-      extends GraphStageWithMaterializedValue[
+      initialKeys: Set[K]
+    ) extends GraphStageWithMaterializedValue[
         FlowShape[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx])],
         PartitionDynamic.Control[K, M]
       ] {
@@ -87,7 +87,8 @@ private[spekka] object PartitionDynamicInternal {
     case class HandlerDescr(
         out: SubStream.SubOutlet[(In, ExtendedContext[Ctx])],
         in: SubStream.SubInlet[(Out, ExtendedContext[Ctx])],
-        materializedValue: M)
+        materializedValue: M
+      )
 
     class PartitionLogic(shape: Shape) extends TimerGraphStageLogic(shape) with SubStream {
       var liveKeys: Set[K] = Set()

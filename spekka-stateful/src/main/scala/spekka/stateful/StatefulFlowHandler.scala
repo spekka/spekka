@@ -35,14 +35,14 @@ private[spekka] object StatefulFlowHandler {
 
   case class ProcessFlowInput[In, Out](
       in: In,
-      replyTo: ActorRef[StatusReply[ProcessFlowOutput[Out]]])
-      extends Protocol[In, Out, Nothing, Any]
+      replyTo: ActorRef[StatusReply[ProcessFlowOutput[Out]]]
+    ) extends Protocol[In, Out, Nothing, Any]
 
   case class ProcessFlowOutput[Out](outs: Seq[Out])
 
   case class ProcessCommand[Command](
-      command: Command)
-      extends Protocol[Nothing, Any, Command, Any]
+      command: Command
+    ) extends Protocol[Nothing, Any, Command, Any]
 
   case class TerminateRequest(replyTo: ActorRef[StatusReply[Done]])
       extends Protocol[Nothing, Any, Nothing, Any]
@@ -70,7 +70,7 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
     }
 
   private def serializeObj(o: AnyRef): Either[Throwable, Array[Byte]] = {
-    (for {
+    for {
       oSerializer <- Try(serialization.findSerializerFor(o.asInstanceOf[AnyRef])).toEither
       oBytes <- Try(oSerializer.toBinary(o.asInstanceOf[AnyRef])).toEither
       oManifest <- Try(Serializers.manifestFor(oSerializer, o.asInstanceOf[AnyRef])).toEither
@@ -86,7 +86,7 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
           .put(oBytes)
           .array()
       }
-    } yield serBytes)
+    } yield serBytes
   }
 
   private def deserializeObj(buff: ByteBuffer): AnyRef = {
@@ -176,7 +176,7 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
           case e: Exception =>
             throw new IllegalArgumentException(
               s"Error de-serializing object of type ${classOf[StatefulFlowHandler.ProcessFlowInput[_, _]]
-                .getName()}",
+                  .getName()}",
               e
             )
         }
@@ -194,7 +194,7 @@ class StatefulFlowHandlerProtocolSerializer(system: ExtendedActorSystem)
           case e: Exception =>
             throw new IllegalArgumentException(
               s"Error de-serializing object of type ${classOf[StatefulFlowHandler.ProcessFlowOutput[_]]
-                .getName()}",
+                  .getName()}",
               e
             )
         }

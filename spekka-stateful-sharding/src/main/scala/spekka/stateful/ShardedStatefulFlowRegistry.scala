@@ -54,7 +54,8 @@ class ShardedStatefulFlowRegistry private[spekka] (
     private[spekka] val sharding: ClusterSharding
   )(implicit scheduler: Scheduler,
     ec: ExecutionContext,
-    timeout: Timeout) {
+    timeout: Timeout
+  ) {
 
   /** Register a stateful flow for the specified entity kind.
     *
@@ -189,8 +190,8 @@ object ShardedStatefulFlowRegistry {
       ]
     )(implicit scheduler: Scheduler,
       ec: ExecutionContext,
-      timeout: Timeout)
-      extends StatefulFlowControl[Command] {
+      timeout: Timeout
+    ) extends StatefulFlowControl[Command] {
 
     import akka.actor.typed.scaladsl.AskPattern._
 
@@ -217,8 +218,8 @@ object ShardedStatefulFlowRegistry {
       ],
       private[spekka] val shardingRef: ActorRef[
         ShardingEnvelope[StatefulFlowHandler.Protocol[In, Out, Command, Nothing]]
-      ])
-      extends StatefulFlowBuilder[In, Out, Command] {
+      ]
+    ) extends StatefulFlowBuilder[In, Out, Command] {
 
     val entityKind: String = entityType.name
 

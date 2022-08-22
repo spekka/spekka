@@ -117,9 +117,11 @@ object StatefulFlowDurableStateExample extends App {
         control: PartitionControl.DynamicControl[
           DeploymentId,
           PartitionControl.DynamicControl[EntranceId, M]
-        ])
+        ]
+      )
     case class ByDeployment[M](
-        control: PartitionControl.DynamicControl[DeploymentId, M])
+        control: PartitionControl.DynamicControl[DeploymentId, M]
+      )
   }
   val combinedFlow = Partition
     .treeBuilder[CounterSample, Offset]

@@ -71,7 +71,8 @@ object AkkaPersistenceStatefulFlowBackend {
   private[AkkaPersistenceStatefulFlowBackend] class StateWrapper[State] private[StateWrapper] (
       var waitForRecoverCompletion: Boolean,
       var waitingForProcessingCompletion: Boolean,
-      val innerState: State) {
+      val innerState: State
+    ) {
     def withInnerState(s: State): StateWrapper[State] =
       new StateWrapper(waitForRecoverCompletion, waitingForProcessingCompletion, s)
   }
@@ -138,22 +139,22 @@ object AkkaPersistenceStatefulFlowBackend {
 
     private[spekka] case class InputProcessingResultReady[Ev](
         result: Try[StatefulFlowLogic.EventBased.ProcessingResult[Ev]],
-        replyTo: ActorRef[StatusReply[StatefulFlowHandler.ProcessFlowOutput[Ev]]])
-        extends StatefulFlowHandler.BackendProtocol[AkkaPersistenceBackendProtocol]
+        replyTo: ActorRef[StatusReply[StatefulFlowHandler.ProcessFlowOutput[Ev]]]
+      ) extends StatefulFlowHandler.BackendProtocol[AkkaPersistenceBackendProtocol]
 
     private[spekka] case class CommandProcessingResultReady[Ev](
-        result: Try[StatefulFlowLogic.EventBased.ProcessingResult[Ev]])
-        extends StatefulFlowHandler.BackendProtocol[AkkaPersistenceBackendProtocol]
+        result: Try[StatefulFlowLogic.EventBased.ProcessingResult[Ev]]
+      ) extends StatefulFlowHandler.BackendProtocol[AkkaPersistenceBackendProtocol]
 
     private[spekka] case class BeforeSideEffectCompleted[Ev](
         result: StatefulFlowLogic.EventBased.ProcessingResult[Ev],
         successAction: () => Unit,
-        failureAction: (Throwable) => Unit)
-        extends AkkaPersistenceBackendProtocol
+        failureAction: (Throwable) => Unit
+      ) extends AkkaPersistenceBackendProtocol
 
     private[spekka] case class AfterSideEffectCompleted(
-        successAction: () => Unit)
-        extends AkkaPersistenceBackendProtocol
+        successAction: () => Unit
+      ) extends AkkaPersistenceBackendProtocol
 
     private[spekka] case class SideEffectFailure(ex: Throwable, failureAction: (Throwable) => Unit)
         extends AkkaPersistenceBackendProtocol
@@ -708,8 +709,8 @@ object AkkaPersistenceStatefulFlowBackend {
       eventsPartitions: Int,
       sideEffectsParallelism: Int,
       eventAdapter: Option[EventAdapter[Ev, _]],
-      snapshotAdapter: Option[SnapshotAdapter[State]])
-      extends StatefulFlowBackend.EventBased[State, Ev, EventBased.AkkaPersistenceBackendProtocol] {
+      snapshotAdapter: Option[SnapshotAdapter[State]]
+    ) extends StatefulFlowBackend.EventBased[State, Ev, EventBased.AkkaPersistenceBackendProtocol] {
     override val id: String = "akka-persistence-event-based"
 
     override private[spekka] def behaviorFor[In, Command](
@@ -955,8 +956,8 @@ object AkkaPersistenceStatefulFlowBackend {
       sideEffectsParallelism: Int,
       eventAdapter: Option[EventAdapter[Ev, _]],
       snapshotAdapter: Option[SnapshotAdapter[State]],
-      initializationTimeout: FiniteDuration)
-      extends StatefulFlowBackend.EventBasedAsync[
+      initializationTimeout: FiniteDuration
+    ) extends StatefulFlowBackend.EventBasedAsync[
         State,
         Ev,
         EventBased.AkkaPersistenceBackendProtocol
@@ -1124,22 +1125,22 @@ object AkkaPersistenceStatefulFlowBackend {
 
     private[spekka] case class InputProcessingResultReady[State, Out](
         result: Try[StatefulFlowLogic.DurableState.ProcessingResult[State, Out]],
-        replyTo: ActorRef[StatusReply[StatefulFlowHandler.ProcessFlowOutput[Out]]])
-        extends StatefulFlowHandler.BackendProtocol[AkkaPersistenceBackendProtocol]
+        replyTo: ActorRef[StatusReply[StatefulFlowHandler.ProcessFlowOutput[Out]]]
+      ) extends StatefulFlowHandler.BackendProtocol[AkkaPersistenceBackendProtocol]
 
     private[spekka] case class CommandProcessingResultReady[State](
-        result: Try[StatefulFlowLogic.DurableState.ProcessingResult[State, Nothing]])
-        extends StatefulFlowHandler.BackendProtocol[AkkaPersistenceBackendProtocol]
+        result: Try[StatefulFlowLogic.DurableState.ProcessingResult[State, Nothing]]
+      ) extends StatefulFlowHandler.BackendProtocol[AkkaPersistenceBackendProtocol]
 
     private[spekka] case class BeforeSideEffectCompleted[State, Out](
         result: StatefulFlowLogic.DurableState.ProcessingResult[State, Out],
         successAction: () => Unit,
-        failureAction: (Throwable) => Unit)
-        extends AkkaPersistenceBackendProtocol
+        failureAction: (Throwable) => Unit
+      ) extends AkkaPersistenceBackendProtocol
 
     private[spekka] case class AfterSideEffectCompleted(
-        successAction: () => Unit)
-        extends AkkaPersistenceBackendProtocol
+        successAction: () => Unit
+      ) extends AkkaPersistenceBackendProtocol
 
     private[spekka] case class SideEffectFailure(ex: Throwable, failureAction: (Throwable) => Unit)
         extends AkkaPersistenceBackendProtocol
@@ -1612,8 +1613,8 @@ object AkkaPersistenceStatefulFlowBackend {
   class DurableState[State] private[spekka] (
       storagePlugin: DurableState.PersistencePlugin,
       sideEffectsParallelism: Int,
-      snapshotAdapter: Option[SnapshotAdapter[State]])
-      extends StatefulFlowBackend.DurableState[State, DurableState.AkkaPersistenceBackendProtocol] {
+      snapshotAdapter: Option[SnapshotAdapter[State]]
+    ) extends StatefulFlowBackend.DurableState[State, DurableState.AkkaPersistenceBackendProtocol] {
     override val id: String = "akka-persistence-durable-state"
 
     override private[spekka] def behaviorFor[In, Out, Command](
@@ -1764,8 +1765,8 @@ object AkkaPersistenceStatefulFlowBackend {
       storagePlugin: DurableState.PersistencePlugin,
       sideEffectsParallelism: Int,
       snapshotAdapter: Option[SnapshotAdapter[State]],
-      initializationTimeout: FiniteDuration)
-      extends StatefulFlowBackend.DurableStateAsync[
+      initializationTimeout: FiniteDuration
+    ) extends StatefulFlowBackend.DurableStateAsync[
         State,
         DurableState.AkkaPersistenceBackendProtocol
       ] {

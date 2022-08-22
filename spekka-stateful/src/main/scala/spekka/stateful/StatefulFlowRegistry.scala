@@ -63,7 +63,8 @@ class StatefulFlowRegistry private[spekka] (
     private val registryRef: ActorRef[StatefulFlowRegistry.ExposedProtocol]
   )(implicit scheduler: Scheduler,
     ec: ExecutionContext,
-    timeout: Timeout) {
+    timeout: Timeout
+  ) {
   import akka.actor.typed.scaladsl.AskPattern._
 
   /** Register a stateful flow for the specified entity kind.
@@ -214,8 +215,8 @@ object StatefulFlowRegistry {
       handlerRef: ActorRef[StatefulFlowHandler.Protocol[Nothing, Any, Command, Any]]
     )(implicit scheduler: Scheduler,
       ec: ExecutionContext,
-      timeout: Timeout)
-      extends StatefulFlowControl[Command] {
+      timeout: Timeout
+    ) extends StatefulFlowControl[Command] {
     import akka.actor.typed.scaladsl.AskPattern._
 
     def command(command: Command): Unit =
@@ -233,8 +234,8 @@ object StatefulFlowRegistry {
 
   final private[spekka] class StatefulFlowLazyEntityControlImpl[Command](
       control: StatefulFlowLazyControlImpl[Command],
-      entityId: String)
-      extends StatefulFlowLazyEntityControl[Command] {
+      entityId: String
+    ) extends StatefulFlowLazyEntityControl[Command] {
     override def command(command: Command): Future[Unit] = control.command(entityId, command)
 
     override def commandOption(command: Command): Future[Boolean] =
@@ -251,8 +252,8 @@ object StatefulFlowRegistry {
 
   final private[spekka] class StatefulFlowLazyControlImpl[Command](
       builder: StatefulFlowBuilder[_, _, Command]
-    )(implicit ec: ExecutionContext)
-      extends StatefulFlowLazyControl[Command] {
+    )(implicit ec: ExecutionContext
+    ) extends StatefulFlowLazyControl[Command] {
     override def command(entityId: String, command: Command): Future[Unit] = {
       for {
         maybeCtrl <- builder.control(entityId)
@@ -308,8 +309,8 @@ object StatefulFlowRegistry {
 
   final private[spekka] class StatefulFlowBuilderImpl[In, Out, Command](
       private[spekka] val registry: StatefulFlowRegistry,
-      val entityKind: String)
-      extends StatefulFlowBuilder[In, Out, Command] {
+      val entityKind: String
+    ) extends StatefulFlowBuilder[In, Out, Command] {
     override def flow(
         entityId: String
       ): Flow[In, Seq[Out], Future[StatefulFlowControl[Command]]] =
@@ -373,26 +374,26 @@ object StatefulFlowRegistry {
     case class RegisterStatefulFlowHandler[In, Out, Command, Result](
         entityKind: String,
         flowSpec: StatefulFlowProps[In, Out, Command],
-        replyTo: ActorRef[StatusReply[Done]])
-        extends ExposedProtocol
+        replyTo: ActorRef[StatusReply[Done]]
+      ) extends ExposedProtocol
 
     case class GetHandlerForEntity(
         entityKind: String,
         entityId: String,
-        replyTo: ActorRef[StatusReply[Option[ActorRef[StatefulFlowHandler.Protocol[_, _, _, _]]]]])
-        extends ExposedProtocol
+        replyTo: ActorRef[StatusReply[Option[ActorRef[StatefulFlowHandler.Protocol[_, _, _, _]]]]]
+      ) extends ExposedProtocol
 
     case class GetOrSpawnHandlerForEntity(
         entityKind: String,
         entityId: String,
-        replyTo: ActorRef[StatusReply[ActorRef[StatefulFlowHandler.Protocol[_, _, _, _]]]])
-        extends ExposedProtocol
+        replyTo: ActorRef[StatusReply[ActorRef[StatefulFlowHandler.Protocol[_, _, _, _]]]]
+      ) extends ExposedProtocol
 
     case class WaitForHandlerTermination(
         entityKind: String,
         entityId: String,
-        replyTo: ActorRef[Done])
-        extends ExposedProtocol
+        replyTo: ActorRef[Done]
+      ) extends ExposedProtocol
 
     case class StatefulFlowHandlerTerminated(entityKind: String, entityId: String) extends Protocol
   }

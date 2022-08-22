@@ -243,7 +243,8 @@ object SubStream {
     private[SubStream] case class Refs[T](
         initializeCallback: AsyncCallback[SubOutlet.Refs[T]],
         pushCallback: AsyncCallback[T],
-        failureCallback: AsyncCallback[Throwable])
+        failureCallback: AsyncCallback[Throwable]
+      )
   }
 
   class SubInlet[T](handler: SubInHandler[T], bufferSize: Int) {
@@ -377,7 +378,8 @@ object SubStream {
     private[SubStream] case class Refs[T](
         initializeCallback: AsyncCallback[SubInlet.Refs[T]],
         pullCallback: AsyncCallback[Int],
-        cancelCallback: AsyncCallback[Throwable])
+        cancelCallback: AsyncCallback[Throwable]
+      )
   }
 
   class SubOutlet[T](handler: SubOutHandler[T]) {

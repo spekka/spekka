@@ -35,8 +35,8 @@ sealed trait StatefulFlowProps[In, Out, Command] {
 private[spekka] object StatefulFlowProps {
   class EventBased[State, Ev, In, Command, BackendProtocol](
       logic: StatefulFlowLogic.EventBased[State, Ev, In, Command],
-      val backend: StatefulFlowBackend.EventBased[State, Ev, BackendProtocol])
-      extends StatefulFlowProps[In, Ev, Command] {
+      val backend: StatefulFlowBackend.EventBased[State, Ev, BackendProtocol]
+    ) extends StatefulFlowProps[In, Ev, Command] {
 
     type BP = BackendProtocol
 
@@ -49,8 +49,8 @@ private[spekka] object StatefulFlowProps {
 
   class EventBasedAsync[State, Ev, In, Command, BackendProtocol](
       logic: StatefulFlowLogic.EventBasedAsync[State, Ev, In, Command],
-      val backend: StatefulFlowBackend.EventBasedAsync[State, Ev, BackendProtocol])
-      extends StatefulFlowProps[In, Ev, Command] {
+      val backend: StatefulFlowBackend.EventBasedAsync[State, Ev, BackendProtocol]
+    ) extends StatefulFlowProps[In, Ev, Command] {
 
     type BP = BackendProtocol
 
@@ -63,8 +63,8 @@ private[spekka] object StatefulFlowProps {
 
   class DurableState[State, In, Out, Command, BackendProtocol](
       logic: StatefulFlowLogic.DurableState[State, In, Out, Command],
-      val backend: StatefulFlowBackend.DurableState[State, BackendProtocol])
-      extends StatefulFlowProps[In, Out, Command] {
+      val backend: StatefulFlowBackend.DurableState[State, BackendProtocol]
+    ) extends StatefulFlowProps[In, Out, Command] {
 
     type BP = BackendProtocol
     override def behaviorFor(
@@ -76,8 +76,8 @@ private[spekka] object StatefulFlowProps {
 
   class DurableStateAsync[State, In, Out, Command, BackendProtocol](
       logic: StatefulFlowLogic.DurableStateAsync[State, In, Out, Command],
-      val backend: StatefulFlowBackend.DurableStateAsync[State, BackendProtocol])
-      extends StatefulFlowProps[In, Out, Command] {
+      val backend: StatefulFlowBackend.DurableStateAsync[State, BackendProtocol]
+    ) extends StatefulFlowProps[In, Out, Command] {
 
     type BP = BackendProtocol
     override def behaviorFor(

@@ -32,7 +32,8 @@ class StreamBenchmarkRunner[T](
     name: String,
     flow: Graph[FlowShape[T, _], _],
     valuesIt: () => Iterator[T],
-    executionTimeout: Duration) {
+    executionTimeout: Duration
+  ) {
 
   def runWarmup(graph: RunnableGraph[Future[Long]])(implicit mat: Materializer): Unit = {
     println(s"[runner=${name}] running warmup")
@@ -108,7 +109,8 @@ object StreamBenchmarkRunner {
       dMinMillis: Long,
       dMaxMillis: Long,
       dAvgMillis: Long,
-      dStdDev: Double)
+      dStdDev: Double
+    )
 
   case class ResultCollection(n: Int, inputSize: Int, results: Seq[Result]) {
     def printResults(): Unit = {
@@ -119,9 +121,9 @@ object StreamBenchmarkRunner {
 
       def resultString(r: Result): String = {
         f"""${r.name.substring(
-          0,
-          math.min(r.name.size, 30)
-        )}%-30s | ${r.dMinMillis}%10s | ${r.dMaxMillis}%10s | ${r.dAvgMillis}%10s | ${r.dStdDev}%-12.2f | ${r.nOutMin}%10s | ${r.nOutMax}%10s | ${r.nOutAvg}%10s | ${r.nOutStdDev}%-12.2f"""
+            0,
+            math.min(r.name.size, 30)
+          )}%-30s | ${r.dMinMillis}%10s | ${r.dMaxMillis}%10s | ${r.dAvgMillis}%10s | ${r.dStdDev}%-12.2f | ${r.nOutMin}%10s | ${r.nOutMax}%10s | ${r.nOutAvg}%10s | ${r.nOutStdDev}%-12.2f"""
       }
       println(header + "\n" + results.map(resultString).mkString("\n"))
     }

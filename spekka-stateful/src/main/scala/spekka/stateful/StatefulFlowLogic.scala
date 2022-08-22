@@ -150,7 +150,8 @@ object StatefulFlowLogic {
     class ProcessingResult[Ev] private[ProcessingResult] (
         private[spekka] val events: Vector[Ev],
         private[spekka] val beforeUpdateSideEffects: Vector[() => Future[_]],
-        private[spekka] val afterUpdateSideEffects: Vector[() => Future[_]]) {
+        private[spekka] val afterUpdateSideEffects: Vector[() => Future[_]]
+      ) {
 
       /** Checks whether this result has side effects
         *
@@ -725,7 +726,8 @@ object StatefulFlowLogic {
         private[spekka] val state: State,
         private[spekka] val outs: Vector[Out],
         private[spekka] val beforeUpdateSideEffects: Vector[() => Future[_]],
-        private[spekka] val afterUpdateSideEffects: Vector[() => Future[_]]) {
+        private[spekka] val afterUpdateSideEffects: Vector[() => Future[_]]
+      ) {
 
       /** Checks whether this result has side effects
         *

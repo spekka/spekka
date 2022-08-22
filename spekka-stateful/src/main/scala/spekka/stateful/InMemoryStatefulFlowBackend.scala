@@ -45,8 +45,8 @@ object InMemoryStatefulFlowBackend {
   object InMemoryBackendAsyncProtocol {
     private[spekka] case class InputProcessingResultReady[P](
         result: Try[P],
-        replyTo: ActorRef[StatusReply[StatefulFlowHandler.ProcessFlowOutput[Any]]])
-        extends InMemoryBackendAsyncProtocol
+        replyTo: ActorRef[StatusReply[StatefulFlowHandler.ProcessFlowOutput[Any]]]
+      ) extends InMemoryBackendAsyncProtocol
     private[spekka] case class CommandProcessingResultReady[P](result: Try[P])
         extends InMemoryBackendAsyncProtocol
     private[spekka] case object SideEffectCompleted extends InMemoryBackendAsyncProtocol
