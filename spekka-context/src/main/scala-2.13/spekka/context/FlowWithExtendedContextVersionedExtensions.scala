@@ -16,11 +16,11 @@
 
 package spekka.context
 
-import scala.concurrent.Future
 import akka.stream.scaladsl.Flow
 
-/**
-  * Extension to [[FlowWithExtendedContext]] for Scala 2.13
+import scala.concurrent.Future
+
+/** Extension to [[FlowWithExtendedContext]] for Scala 2.13
   */
 trait FlowWithExtendedContextVersionedExtensions {
   import FlowWithExtendedContext.syntax._
