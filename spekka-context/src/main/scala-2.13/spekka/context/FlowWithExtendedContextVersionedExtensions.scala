@@ -20,8 +20,7 @@ import akka.stream.scaladsl.Flow
 
 import scala.concurrent.Future
 
-/**
-  * Extension to [[FlowWithExtendedContext]] for Scala 2.13
+/** Extension to [[FlowWithExtendedContext]] for Scala 2.13
   */
 trait FlowWithExtendedContextVersionedExtensions {
   import FlowWithExtendedContext.syntax._
