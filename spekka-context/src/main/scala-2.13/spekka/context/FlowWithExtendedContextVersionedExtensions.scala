@@ -16,8 +16,9 @@
 
 package spekka.context
 
-import scala.concurrent.Future
 import akka.stream.scaladsl.Flow
+
+import scala.concurrent.Future
 
 /** Extension to [[FlowWithExtendedContext]] for Scala 2.13
   */
