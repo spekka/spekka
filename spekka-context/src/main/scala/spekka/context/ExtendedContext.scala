@@ -60,8 +60,8 @@ private[spekka] trait StackableContext
 
 private[spekka] case class ExtendedContextImpl[Ctx](
     val innerContext: Ctx,
-    stack: List[StackableContext])
-    extends ExtendedContext[Ctx] {
+    stack: List[StackableContext]
+  ) extends ExtendedContext[Ctx] {
 
   override def mapInnerContext[O](f: Ctx => O): ExtendedContext[O] =
     copy(innerContext = f(innerContext))

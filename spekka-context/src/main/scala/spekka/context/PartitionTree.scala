@@ -392,8 +392,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
     class SingleDynamicAuto[K, PKS <: KSeq] private[spekka] (
         extractor: (In, Ctx, PKS) => K,
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx],
-        bufferSize: Int)
-        extends OneForOne[K, PKS] {
+        bufferSize: Int
+      ) extends OneForOne[K, PKS] {
       override private[PartitionTreeBuilder] type MV[M] = PartitionControl.DynamicControl[K, M]
       override def build[O, M](
           parentKeys: PKS,
@@ -410,8 +410,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         extractor: (In, Ctx, PKS) => K,
         initialKeys: PKS => Set[K],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx],
-        bufferSize: Int)
-        extends Optional[K, PKS] {
+        bufferSize: Int
+      ) extends Optional[K, PKS] {
       override private[PartitionTreeBuilder] type MV[M] = PartitionControl.DynamicControl[K, M]
       override def build[O, M](
           parentKeys: PKS,
@@ -437,8 +437,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
     class MultiDynamicAuto[K, PKS <: KSeq] private[spekka] (
         extractor: (In, Ctx, Set[K], PKS) => Set[K],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx],
-        bufferSize: Int)
-        extends Multi[K, PKS] {
+        bufferSize: Int
+      ) extends Multi[K, PKS] {
       override private[PartitionTreeBuilder] type MV[M] = PartitionControl.DynamicControl[K, M]
       override def build[O, M](
           parentKeys: PKS,
@@ -465,8 +465,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         extractor: (In, Ctx, Set[K], PKS) => Set[K],
         initialKeys: PKS => Set[K],
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx],
-        bufferSize: Int)
-        extends Multi[K, PKS] {
+        bufferSize: Int
+      ) extends Multi[K, PKS] {
       override private[PartitionTreeBuilder] type MV[M] = PartitionControl.DynamicControl[K, M]
       override def build[O, M](
           parentKeys: PKS,
@@ -492,8 +492,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       */
     class SingleStatic[K, PKS <: KSeq] private[spekka] (
         extractor: (In, Ctx, PKS) => K,
-        keys: PKS => Set[K])
-        extends OneForOne[K, PKS] {
+        keys: PKS => Set[K]
+      ) extends OneForOne[K, PKS] {
       override private[PartitionTreeBuilder] type MV[M] = PartitionControl.StaticControl[K, M]
       override def build[O, M](
           parentKeys: PKS,
@@ -513,8 +513,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
       */
     class MultiStatic[K, PKS <: KSeq] private[spekka] (
         extractor: (In, Ctx, Set[K], PKS) => Set[K],
-        keys: PKS => Set[K])
-        extends Multi[K, PKS] {
+        keys: PKS => Set[K]
+      ) extends Multi[K, PKS] {
       override private[PartitionTreeBuilder] type MV[M] = PartitionControl.StaticControl[K, M]
       override def build[O, M](
           parentKeys: PKS,
@@ -1032,8 +1032,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
     ] private[spekka] (
       private[spekka] val props: Props,
       private[spekka] val parent: Parent
-    )(implicit ev: Layer.CanBuildOneForOneT[ParentMV, Parent])
-      extends Layer[Lambda[M => ParentMV[Props#MV[M]]]] {
+    )(implicit ev: Layer.CanBuildOneForOneT[ParentMV, Parent]
+    ) extends Layer[Lambda[M => ParentMV[Props#MV[M]]]] {
     override private[PartitionTreeBuilder] type KS = K :@: Parent#KS
 
     implicit private val canBuildOneForOne
@@ -1655,8 +1655,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
     ] private[spekka] (
       private[spekka] val props: Props,
       private[spekka] val parent: Parent
-    )(implicit ev: Layer.CanBuildOptionalT[ParentMV, Parent])
-      extends Layer[Lambda[M => ParentMV[Props#MV[M]]]] {
+    )(implicit ev: Layer.CanBuildOptionalT[ParentMV, Parent]
+    ) extends Layer[Lambda[M => ParentMV[Props#MV[M]]]] {
     override private[PartitionTreeBuilder] type KS = K :@: Parent#KS
 
     implicit private val canBuildOptional
@@ -2283,8 +2283,8 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
     ] private[spekka] (
       private[spekka] val props: Props,
       private[spekka] val parent: Parent
-    )(implicit ev: Layer.CanBuildMultiT[ParentMV, Parent])
-      extends Layer[Lambda[M => ParentMV[Props#MV[M]]]] {
+    )(implicit ev: Layer.CanBuildMultiT[ParentMV, Parent]
+    ) extends Layer[Lambda[M => ParentMV[Props#MV[M]]]] {
     override private[PartitionTreeBuilder] type KS = K :@: Parent#KS
 
     implicit private val canBuildMulti

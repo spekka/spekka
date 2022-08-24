@@ -69,7 +69,8 @@ trait FlowWithExtendedContextSyntax {
   /** Ops class for tupled flows using [[ExtendedContext]].
     */
   implicit class GraphConversionOps[In, Out, Ctx, M](
-      graph: Graph[FlowShape[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx])], M]) {
+      graph: Graph[FlowShape[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx])], M]
+    ) {
 
     /** Converts this flow into a [[FlowWithExtendedContext]].
       *
@@ -86,7 +87,8 @@ trait FlowWithExtendedContextSyntax {
   /** Ops class for [[FlowWithExtendedContext]] with iterable outputs
     */
   implicit class FlowWithExtendedContextListOps[In, Out, Ctx, M](
-      backingFlow: FlowWithExtendedContext[In, immutable.Iterable[Out], Ctx, M]) {
+      backingFlow: FlowWithExtendedContext[In, immutable.Iterable[Out], Ctx, M]
+    ) {
 
     /** Transform this flow by piping each element of the output through the given flow, recombining
       * the results back into a collection.
@@ -485,7 +487,8 @@ object FlowWithExtendedContext
   * flow to ensure in-order processing and committing the offsets as soon as an output is produced.
   */
 final class FlowWithExtendedContext[-In, +Out, Ctx, +M] private[spekka] (
-    delegate: Graph[FlowShape[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx])], M]) {
+    delegate: Graph[FlowShape[(In, ExtendedContext[Ctx]), (Out, ExtendedContext[Ctx])], M]
+  ) {
   import FlowWithExtendedContext.syntax._
 
   /** Proxy for `Flow.withAttributes`
