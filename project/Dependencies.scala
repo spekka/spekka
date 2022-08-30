@@ -21,5 +21,5 @@ object Dependencies {
 
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.13"
 
-  lazy val `logback` = "ch.qos.logback" % "logback-classic" % "1.2.11"
+  lazy val `logback` = "ch.qos.logback" % "logback-classic" % "1.4.0"
 }
