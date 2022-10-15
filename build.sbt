@@ -1,8 +1,8 @@
 import Dependencies._
 
-lazy val scalaVersions = List("2.12.15", "2.13.8")
+lazy val scalaVersions = List("2.12.15", "2.13.10")
 
-ThisBuild / scalaVersion := "2.13.8"
+ThisBuild / scalaVersion := "2.13.10"
 ThisBuild / organization := "io.github.spekka"
 
 ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.6.0"
