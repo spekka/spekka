@@ -19,7 +19,7 @@ object Dependencies {
 
   lazy val `akka-slf4j` = "com.typesafe.akka" %% "akka-slf4j" % AkkaVersion
 
-  lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.13"
+  lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.15"
 
   lazy val `logback` = "ch.qos.logback" % "logback-classic" % "1.2.11"
 }
