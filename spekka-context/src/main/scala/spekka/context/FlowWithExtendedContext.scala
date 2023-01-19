@@ -210,7 +210,7 @@ object FlowWithExtendedContext
               (
                   (Out1, ExtendedContext[Ctx]),
                   (Out2, ExtendedContext[Ctx])
-              ),
+                ),
               (Out3, ExtendedContext[Ctx])
             ]()
           )
@@ -230,7 +230,7 @@ object FlowWithExtendedContext
               (
                   ((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
                   (Out3, ExtendedContext[Ctx])
-              )
+                )
             ].map { case (((o1, ctx), (o2, _)), (o3, _)) =>
               (o1, o2, o3) -> ctx
             }
@@ -272,7 +272,7 @@ object FlowWithExtendedContext
               (
                   (Out1, ExtendedContext[Ctx]),
                   (Out2, ExtendedContext[Ctx])
-              ),
+                ),
               (Out3, ExtendedContext[Ctx])
             ]()
           )
@@ -282,9 +282,9 @@ object FlowWithExtendedContext
                   (
                       (Out1, ExtendedContext[Ctx]),
                       (Out2, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out3, ExtendedContext[Ctx])
-              ),
+                ),
               (Out4, ExtendedContext[Ctx])
             ]()
           )
@@ -308,9 +308,9 @@ object FlowWithExtendedContext
                   (
                       ((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
                       (Out3, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out4, ExtendedContext[Ctx])
-              )
+                )
             ].map { case ((((o1, ctx), (o2, _)), (o3, _)), (o4, _)) =>
               (o1, o2, o3, o4) -> ctx
             }
@@ -357,7 +357,7 @@ object FlowWithExtendedContext
               (
                   (Out1, ExtendedContext[Ctx]),
                   (Out2, ExtendedContext[Ctx])
-              ),
+                ),
               (Out3, ExtendedContext[Ctx])
             ]()
           )
@@ -367,9 +367,9 @@ object FlowWithExtendedContext
                   (
                       (Out1, ExtendedContext[Ctx]),
                       (Out2, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out3, ExtendedContext[Ctx])
-              ),
+                ),
               (Out4, ExtendedContext[Ctx])
             ]()
           )
@@ -380,11 +380,11 @@ object FlowWithExtendedContext
                       (
                           (Out1, ExtendedContext[Ctx]),
                           (Out2, ExtendedContext[Ctx])
-                      ),
+                        ),
                       (Out3, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out4, ExtendedContext[Ctx])
-              ),
+                ),
               (Out5, ExtendedContext[Ctx])
             ]()
           )
@@ -412,11 +412,11 @@ object FlowWithExtendedContext
                       (
                           ((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
                           (Out3, ExtendedContext[Ctx])
-                      ),
+                        ),
                       (Out4, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out5, ExtendedContext[Ctx])
-              )
+                )
             ].map { case (((((o1, ctx), (o2, _)), (o3, _)), (o4, _)), (o5, _)) =>
               (o1, o2, o3, o4, o5) -> ctx
             }
