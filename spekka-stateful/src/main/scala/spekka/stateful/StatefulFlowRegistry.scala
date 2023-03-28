@@ -61,7 +61,8 @@ import scala.concurrent.duration.Duration
   */
 class StatefulFlowRegistry private[spekka] (
     private val registryRef: ActorRef[StatefulFlowRegistry.ExposedProtocol]
-  )(implicit scheduler: Scheduler,
+  )(implicit
+    scheduler: Scheduler,
     ec: ExecutionContext,
     timeout: Timeout
   ) {
@@ -213,7 +214,8 @@ object StatefulFlowRegistry {
       entityKind: String,
       entityId: String,
       handlerRef: ActorRef[StatefulFlowHandler.Protocol[Nothing, Any, Command, Any]]
-    )(implicit scheduler: Scheduler,
+    )(implicit
+      scheduler: Scheduler,
       ec: ExecutionContext,
       timeout: Timeout
     ) extends StatefulFlowControl[Command] {
