@@ -502,28 +502,28 @@ object AkkaPersistenceStatefulFlowBackend {
             ActorContext[
               StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
             ]
-        ) => Effect[Ev, StateWrapper[State]],
+          ) => Effect[Ev, StateWrapper[State]],
         inputProcessingReadyHandler: (
             StateWrapper[State],
             InputProcessingResultReady[Ev],
             ActorContext[
               StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
             ]
-        ) => Effect[Ev, StateWrapper[State]],
+          ) => Effect[Ev, StateWrapper[State]],
         commandHandler: (
             StateWrapper[State],
             StatefulFlowHandler.ProcessCommand[Command],
             ActorContext[
               StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
             ]
-        ) => Effect[Ev, StateWrapper[State]],
+          ) => Effect[Ev, StateWrapper[State]],
         commandProcessingReadyHandler: (
             StateWrapper[State],
             CommandProcessingResultReady[Ev],
             ActorContext[
               StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]
             ]
-        ) => Effect[Ev, StateWrapper[State]]
+          ) => Effect[Ev, StateWrapper[State]]
       ): Behavior[StatefulFlowHandler.Protocol[In, Ev, Command, AkkaPersistenceBackendProtocol]] = {
       val partitionId = Math.abs(entityId.hashCode % partitions)
       val partitionTag = Set(s"$entityKind-$partitionId")
@@ -1457,28 +1457,28 @@ object AkkaPersistenceStatefulFlowBackend {
             ActorContext[
               StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
             ]
-        ) => Effect[StateWrapper[State]],
+          ) => Effect[StateWrapper[State]],
         inputProcessingReadyHandler: (
             StateWrapper[State],
             InputProcessingResultReady[State, Out],
             ActorContext[
               StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
             ]
-        ) => Effect[StateWrapper[State]],
+          ) => Effect[StateWrapper[State]],
         commandHandler: (
             StateWrapper[State],
             StatefulFlowHandler.ProcessCommand[Command],
             ActorContext[
               StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
             ]
-        ) => Effect[StateWrapper[State]],
+          ) => Effect[StateWrapper[State]],
         commandProcessingReadyHandler: (
             StateWrapper[State],
             CommandProcessingResultReady[State],
             ActorContext[
               StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]
             ]
-        ) => Effect[StateWrapper[State]]
+          ) => Effect[StateWrapper[State]]
       ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, AkkaPersistenceBackendProtocol]] = {
       Behaviors.setup { actorContext =>
         implicit val ec: scala.concurrent.ExecutionContext = actorContext.executionContext
