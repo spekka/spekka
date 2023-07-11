@@ -207,10 +207,9 @@ object FlowWithExtendedContext
           val zip1 = builder.add(Zip[(Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])]())
           val zip2 = builder.add(
             Zip[
-              (
-                  (Out1, ExtendedContext[Ctx]),
+              ((Out1, ExtendedContext[Ctx]),
                   (Out2, ExtendedContext[Ctx])
-              ),
+                ),
               (Out3, ExtendedContext[Ctx])
             ]()
           )
@@ -227,10 +226,9 @@ object FlowWithExtendedContext
 
           val adapter = builder.add {
             Flow[
-              (
-                  ((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
+              (((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
                   (Out3, ExtendedContext[Ctx])
-              )
+                )
             ].map { case (((o1, ctx), (o2, _)), (o3, _)) =>
               (o1, o2, o3) -> ctx
             }
@@ -269,22 +267,19 @@ object FlowWithExtendedContext
           val zip1 = builder.add(Zip[(Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])]())
           val zip2 = builder.add(
             Zip[
-              (
-                  (Out1, ExtendedContext[Ctx]),
+              ((Out1, ExtendedContext[Ctx]),
                   (Out2, ExtendedContext[Ctx])
-              ),
+                ),
               (Out3, ExtendedContext[Ctx])
             ]()
           )
           val zip3 = builder.add(
             Zip[
-              (
-                  (
-                      (Out1, ExtendedContext[Ctx]),
+              (((Out1, ExtendedContext[Ctx]),
                       (Out2, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out3, ExtendedContext[Ctx])
-              ),
+                ),
               (Out4, ExtendedContext[Ctx])
             ]()
           )
@@ -304,13 +299,11 @@ object FlowWithExtendedContext
 
           val adapter = builder.add {
             Flow[
-              (
-                  (
-                      ((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
+              ((((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
                       (Out3, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out4, ExtendedContext[Ctx])
-              )
+                )
             ].map { case ((((o1, ctx), (o2, _)), (o3, _)), (o4, _)) =>
               (o1, o2, o3, o4) -> ctx
             }
@@ -354,37 +347,31 @@ object FlowWithExtendedContext
           val zip1 = builder.add(Zip[(Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])]())
           val zip2 = builder.add(
             Zip[
-              (
-                  (Out1, ExtendedContext[Ctx]),
+              ((Out1, ExtendedContext[Ctx]),
                   (Out2, ExtendedContext[Ctx])
-              ),
+                ),
               (Out3, ExtendedContext[Ctx])
             ]()
           )
           val zip3 = builder.add(
             Zip[
-              (
-                  (
-                      (Out1, ExtendedContext[Ctx]),
+              (((Out1, ExtendedContext[Ctx]),
                       (Out2, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out3, ExtendedContext[Ctx])
-              ),
+                ),
               (Out4, ExtendedContext[Ctx])
             ]()
           )
           val zip4 = builder.add(
             Zip[
-              (
-                  (
-                      (
-                          (Out1, ExtendedContext[Ctx]),
+              ((((Out1, ExtendedContext[Ctx]),
                           (Out2, ExtendedContext[Ctx])
-                      ),
+                        ),
                       (Out3, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out4, ExtendedContext[Ctx])
-              ),
+                ),
               (Out5, ExtendedContext[Ctx])
             ]()
           )
@@ -407,16 +394,13 @@ object FlowWithExtendedContext
 
           val adapter = builder.add {
             Flow[
-              (
-                  (
-                      (
-                          ((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
+              (((((Out1, ExtendedContext[Ctx]), (Out2, ExtendedContext[Ctx])),
                           (Out3, ExtendedContext[Ctx])
-                      ),
+                        ),
                       (Out4, ExtendedContext[Ctx])
-                  ),
+                    ),
                   (Out5, ExtendedContext[Ctx])
-              )
+                )
             ].map { case (((((o1, ctx), (o2, _)), (o3, _)), (o4, _)), (o5, _)) =>
               (o1, o2, o3, o4, o5) -> ctx
             }
