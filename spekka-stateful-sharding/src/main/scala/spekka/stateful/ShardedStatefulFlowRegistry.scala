@@ -52,7 +52,8 @@ import scala.concurrent.duration.Duration
 class ShardedStatefulFlowRegistry private[spekka] (
     private[spekka] val registry: StatefulFlowRegistry,
     private[spekka] val sharding: ClusterSharding
-  )(implicit scheduler: Scheduler,
+  )(implicit
+    scheduler: Scheduler,
     ec: ExecutionContext,
     timeout: Timeout
   ) {
@@ -188,7 +189,8 @@ object ShardedStatefulFlowRegistry {
       shardingRef: ActorRef[
         ShardingEnvelope[StatefulFlowHandler.Protocol[Nothing, Any, Command, Nothing]]
       ]
-    )(implicit scheduler: Scheduler,
+    )(implicit
+      scheduler: Scheduler,
       ec: ExecutionContext,
       timeout: Timeout
     ) extends StatefulFlowControl[Command] {
