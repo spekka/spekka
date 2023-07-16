@@ -77,9 +77,8 @@ private[spekka] case class ExtendedContextImpl[Ctx](
   override private[spekka] def peek[T <: StackableContext: ClassTag]: Option[T] =
     coerceContext(stack.headOption)
 
-  override private[spekka] def pop[
-      T <: StackableContext: ClassTag
-    ]: (ExtendedContext[Ctx], Option[T]) =
+  override private[spekka] def pop[T <: StackableContext: ClassTag]
+      : (ExtendedContext[Ctx], Option[T]) =
     peek[T] match {
       case res @ Some(_) => copy(stack = stack.tail) -> res
       case None => this -> None
