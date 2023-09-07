@@ -224,7 +224,8 @@ object StatefulFlowBackend {
           StatefulFlowHandler.Protocol[In, Out, Command, Protocol]
         ],
         stashBufferSize: Int
-      )(implicit ex: ExecutionContext,
+      )(implicit
+        ex: ExecutionContext,
         adapter: ProtocolAdapter[Protocol]
       ): Behavior[StatefulFlowHandler.Protocol[In, Out, Command, Protocol]] = {
 
