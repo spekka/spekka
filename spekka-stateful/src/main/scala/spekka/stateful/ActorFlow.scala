@@ -42,7 +42,8 @@ private[spekka] object ActorFlow {
   def askWithContext[I, Q, A, Ctx](
       ref: ActorRef[Q]
     )(makeMessage: (I, ActorRef[A]) => Q
-    )(implicit timeout: Timeout,
+    )(implicit
+      timeout: Timeout,
       ec: ExecutionContext
     ): Flow[(I, Ctx), (A, Ctx), NotUsed] =
     askWithContext[I, Q, A, Ctx](parallelism = 2)(ref)(makeMessage)(timeout, ec)
@@ -51,7 +52,8 @@ private[spekka] object ActorFlow {
       parallelism: Int
     )(ref: ActorRef[Q]
     )(makeMessage: (I, ActorRef[A]) => Q
-    )(implicit timeout: Timeout,
+    )(implicit
+      timeout: Timeout,
       ec: ExecutionContext
     ): Flow[(I, Ctx), (A, Ctx), NotUsed] = {
     import akka.actor.typed.scaladsl.adapter._
@@ -87,7 +89,8 @@ private[spekka] object ActorFlow {
   def askWithStatusAndContext[I, Q, A, Ctx](
       ref: ActorRef[Q]
     )(makeMessage: (I, ActorRef[StatusReply[A]]) => Q
-    )(implicit timeout: Timeout,
+    )(implicit
+      timeout: Timeout,
       ec: ExecutionContext
     ): Flow[(I, Ctx), (A, Ctx), NotUsed] = askWithStatusAndContext(2)(ref)(makeMessage)
 
@@ -95,7 +98,8 @@ private[spekka] object ActorFlow {
       parallelism: Int
     )(ref: ActorRef[Q]
     )(makeMessage: (I, ActorRef[StatusReply[A]]) => Q
-    )(implicit timeout: Timeout,
+    )(implicit
+      timeout: Timeout,
       ec: ExecutionContext
     ): Flow[(I, Ctx), (A, Ctx), NotUsed] = {
     askWithContext[I, Q, StatusReply[A], Ctx](parallelism)(ref)(makeMessage).map {
