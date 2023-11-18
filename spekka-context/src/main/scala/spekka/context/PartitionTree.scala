@@ -1697,7 +1697,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
-      ): Optional[K1, PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
+      ): Optional[
+      K1,
+      PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Optional[K, Props, ParentMV, Parent]
+    ] = {
       val baseProp =
         new PartitioningProps.SingleDynamicAuto[K1, KS](
           extractor,
@@ -1742,7 +1747,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
-      ): Optional[K1, PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
+      ): Optional[
+      K1,
+      PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Optional[K, Props, ParentMV, Parent]
+    ] = {
       val extractorWrapper: (In, Ctx, KS) => K1 = (in, ctx, _) => extractor(in, ctx)
       dynamicAutoCtxWithKeys(extractorWrapper, completionCriteria, bufferSize)
     }
@@ -1766,7 +1776,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
-      ): Optional[K1, PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
+      ): Optional[
+      K1,
+      PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Optional[K, Props, ParentMV, Parent]
+    ] = {
       dynamicAutoCtx(
         (in: In, _: Ctx) => extractor(in),
         completionCriteria,
@@ -2103,7 +2118,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
     def staticCtxWithKeys[K1](
         extractor: (In, Ctx, KS) => K1,
         keys: KS => Set[K1]
-      ): Optional[K1, PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleStatic[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
+      ): Optional[
+      K1,
+      PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleStatic[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Optional[K, Props, ParentMV, Parent]
+    ] = {
       val baseProp = new PartitioningProps.SingleStatic(extractor, keys)
       val prop =
         new PartitioningProps.OneForOneAsOptional[
@@ -2139,7 +2159,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
     def staticCtx[K1](
         extractor: (In, Ctx) => K1,
         keys: Set[K1]
-      ): Optional[K1, PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleStatic[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
+      ): Optional[
+      K1,
+      PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleStatic[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Optional[K, Props, ParentMV, Parent]
+    ] = {
       val extractorWrapper: (In, Ctx, KS) => K1 = (in, ctx, _) => extractor(in, ctx)
       val keysWrapper: KS => Set[K1] = _ => keys
       staticCtxWithKeys(extractorWrapper, keysWrapper)
@@ -2161,7 +2186,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
     def static[K1](
         extractor: In => K1,
         keys: Set[K1]
-      ): Optional[K1, PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleStatic[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Optional[K, Props, ParentMV, Parent]] = {
+      ): Optional[
+      K1,
+      PartitioningProps.OneForOneAsOptional[K1, KS, PartitioningProps.SingleStatic[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Optional[K, Props, ParentMV, Parent]
+    ] = {
       staticCtx(
         (in: In, _: Ctx) => extractor(in),
         keys
@@ -2322,7 +2352,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
-      ): Multi[K1, PartitioningProps.OneForOneAsMulti[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
+      ): Multi[
+      K1,
+      PartitioningProps.OneForOneAsMulti[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Multi[K, Props, ParentMV, Parent]
+    ] = {
       val baseProp =
         new PartitioningProps.SingleDynamicAuto[K1, KS](
           extractor,
@@ -2368,7 +2403,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
-      ): Multi[K1, PartitioningProps.OneForOneAsMulti[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
+      ): Multi[
+      K1,
+      PartitioningProps.OneForOneAsMulti[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Multi[K, Props, ParentMV, Parent]
+    ] = {
       val extractorWrapper: (In, Ctx, KS) => K1 = (in, ctx, _) => extractor(in, ctx)
       dynamicAutoCtxWithKeys(extractorWrapper, completionCriteria, bufferSize)
     }
@@ -2392,7 +2432,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
-      ): Multi[K1, PartitioningProps.OneForOneAsMulti[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
+      ): Multi[
+      K1,
+      PartitioningProps.OneForOneAsMulti[K1, KS, PartitioningProps.SingleDynamicAuto[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Multi[K, Props, ParentMV, Parent]
+    ] = {
       dynamicAutoCtx(
         (in: In, _: Ctx) => extractor(in),
         completionCriteria,
@@ -2523,7 +2568,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
-      ): Multi[K1, PartitioningProps.OptionalAsMulti[K1, KS, PartitioningProps.SingleDynamicManual[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
+      ): Multi[
+      K1,
+      PartitioningProps.OptionalAsMulti[K1, KS, PartitioningProps.SingleDynamicManual[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Multi[K, Props, ParentMV, Parent]
+    ] = {
       val baseProp =
         new PartitioningProps.SingleDynamicManual(
           extractor,
@@ -2575,7 +2625,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
-      ): Multi[K1, PartitioningProps.OptionalAsMulti[K1, KS, PartitioningProps.SingleDynamicManual[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
+      ): Multi[
+      K1,
+      PartitioningProps.OptionalAsMulti[K1, KS, PartitioningProps.SingleDynamicManual[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Multi[K, Props, ParentMV, Parent]
+    ] = {
       val extractorWrapper: (In, Ctx, KS) => K1 = (in, ctx, _) => extractor(in, ctx)
       val initialKeysWrapper: KS => Set[K1] = _ => initialKeys
       dynamicManualCtxWithKeys(extractorWrapper, initialKeysWrapper, completionCriteria, bufferSize)
@@ -2605,7 +2660,12 @@ class PartitionTreeBuilder[In, Ctx] private[spekka] {
         completionCriteria: PartitionDynamic.CompletionCriteria[In, Any, Ctx] =
           PartitionDynamic.defaultCompletionCriteria,
         bufferSize: Int = PartitionDynamic.defaultBufferSize
-      ): Multi[K1, PartitioningProps.OptionalAsMulti[K1, KS, PartitioningProps.SingleDynamicManual[K1, KS]], Lambda[M => ParentMV[Props#MV[M]]], Multi[K, Props, ParentMV, Parent]] = {
+      ): Multi[
+      K1,
+      PartitioningProps.OptionalAsMulti[K1, KS, PartitioningProps.SingleDynamicManual[K1, KS]],
+      Lambda[M => ParentMV[Props#MV[M]]],
+      Multi[K, Props, ParentMV, Parent]
+    ] = {
       dynamicManualCtx(
         (in: In, _: Ctx) => extractor(in),
         initialKeys,
